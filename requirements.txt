@@ -1,0 +1,10 @@
+torch
+torchvision
+transformers
+diffusers
+accelerate
+opencv-python
+Pillow
+numpy
+onnxruntime
+huggingface_hub

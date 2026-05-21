@@ -4,6 +4,10 @@ import torch
 import cv2
 import numpy as np
 from PIL import Image
+import matplotlib
+matplotlib.use('Agg') # Safe headless matplotlib backend
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # Ensure we can import local modules
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -14,7 +18,7 @@ from masking_bisenet.generate_mask_bisenet import generate_bisenet_face_parts_ma
 from util.dilate_mask import dilate_mask
 from util.smooth_mask import smooth_mask
 from util.crop_face import get_crop_info, apply_crop, restore_crop
-from diffusers import StableDiffusionInpaintPipeline, StableDiffusionControlNetInpaintPipeline, ControlNetModel, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
+from diffusers import StableDiffusionInpaintPipeline, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
 from transformers import CLIPTextModel
 import transformers
 if not hasattr(transformers, 'CLIPFeatureExtractor'):
@@ -22,17 +26,14 @@ if not hasattr(transformers, 'CLIPFeatureExtractor'):
 
 #======= Configuration
 base_model_path = "emilianJR/epiCRealism" 
-USE_CONTROLNET = False
-controlnet_id = "lllyasviel/sd-controlnet-canny"
+unified_lora_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
 
 #======= Paths and Setup
 input_images_dir = os.path.join(root_path, "data/raw_face_data")
 output_dir = os.path.join(root_path, "tests/data/eyebrow_tests")
 os.makedirs(output_dir, exist_ok=True)
 
-MASK_FILL_TYPE = "telea" 
-
-# 锁定黄金参数
+#======= Golden Parameters
 STABLE_STRENGTH = 0.50
 STABLE_CN_SCALE = 0
 STABLE_LORA_SCALE = 0.90
@@ -45,6 +46,57 @@ comparison_cases = [
     { "celeb": "신세경", "display_name": "Shin Se Kyung" },
     { "celeb": "홍수주", "display_name": "Hong Su Zu" }
 ]
+
+#======= Global Storage for UNet Attention Features
+all_feature_vectors = []
+all_feature_labels = []
+
+class EyebrowFeatureHook:
+    """
+    Hook to capture features from the UNet up-block attention layers.
+    Specifically captures the final 3 steps of diffusion where eyebrow characteristics are fully defined.
+    """
+    def __init__(self, celeb, mask_512_binary, total_steps):
+        self.celeb = celeb
+        self.mask_512_binary = mask_512_binary
+        self.total_steps = total_steps
+        self.step_counter = 0
+        self.features_extracted = []
+
+    def __call__(self, module, input, output):
+        tensor = output[0] if isinstance(output, tuple) else output
+        
+        # Separate CFG batches: index 1 is positive prompt conditioning
+        idx = 1 if tensor.shape[0] > 1 else 0
+        val = tensor[idx].detach().cpu().float().numpy()
+        
+        # Extract features only during the last 3 steps of generation
+        if self.step_counter >= max(0, self.total_steps - 3):
+            if len(val.shape) == 3: # [C, H, W]
+                c, h, w = val.shape
+            elif len(val.shape) == 2: # [Seq_len, C]
+                seq_len, c = val.shape
+                import math
+                h = w = int(math.sqrt(seq_len))
+                val = val.reshape(h, w, c).transpose(2, 0, 1) # [C, H, W]
+            else:
+                self.step_counter += 1
+                return
+            
+            # Downsample the mask to match feature map spatial dimensions (H x W)
+            mask_resized = cv2.resize(self.mask_512_binary, (w, h), interpolation=cv2.INTER_NEAREST)
+            mask_resized = mask_resized.astype(np.float32) / 255.0
+            
+            # Masked average pooling
+            mask_sum = mask_resized.sum()
+            if mask_sum > 0:
+                masked_avg = (val * mask_resized).sum(axis=(1, 2)) / mask_sum
+            else:
+                masked_avg = val.mean(axis=(1, 2))
+                
+            self.features_extracted.append((self.step_counter, masked_avg))
+            
+        self.step_counter += 1
 
 class DiffusionBackbone:
     def __init__(self, model_id="runwayml/stable-diffusion-v1-5", dtype=torch.float32):
@@ -84,7 +136,6 @@ def load_pipeline():
     loaded_any = False
     
     # 1. Load UNIFIED LoRA model "all"
-    unified_lora_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
     if os.path.exists(os.path.join(unified_lora_path, "unet")):
         pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(unified_lora_path, "unet"), adapter_name="all_celebs")
         pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(unified_lora_path, "text_encoder"), adapter_name="all_celebs")
@@ -116,6 +167,7 @@ def load_pipeline():
     return pipe
 
 def run_single_image_test(pipe, image_path):
+    global all_feature_vectors, all_feature_labels
     img_basename = os.path.basename(image_path).split('.')[0]
     print(f"\n>>> Processing: {img_basename}")
     
@@ -140,7 +192,6 @@ def run_single_image_test(pipe, image_path):
     
     image_pil = Image.fromarray(cv2.cvtColor(masked_image_512, cv2.COLOR_BGR2RGB))
     
-    # For full_face_gen we use white mask
     pipe_mask_pil = Image.new("RGB", (512, 512), "white")
     control_image_pil = get_canny_guide(image_512)
     
@@ -172,7 +223,7 @@ def run_single_image_test(pipe, image_path):
             guidance_scale=6.0, strength=STABLE_STRENGTH, generator=generator
         ).images[0]
         
-        # --- Generation 2: All LoRA ---
+        # --- Generation 2: All LoRA (and Capture UNet Attention Features) ---
         if hasattr(pipe.unet, "peft_config") and all_adapter_name in pipe.unet.peft_config:
             pipe.enable_lora()
             pipe.set_adapters([all_adapter_name], adapter_weights=[STABLE_LORA_SCALE])
@@ -180,12 +231,25 @@ def run_single_image_test(pipe, image_path):
             if hasattr(pipe, "disable_lora"):
                 pipe.disable_lora()
                 
+        # Register Forward Hook for feature capture during the Unified LoRA run
+        total_steps = int(40 * STABLE_STRENGTH)
+        hook = EyebrowFeatureHook(celeb, mask_512_binary, total_steps)
+        hook_handle = pipe.unet.up_blocks[1].attentions[1].register_forward_hook(hook)
+
         output_all = pipe(
             prompt=current_prompt, negative_prompt=UNIFIED_NEGATIVE_PROMPT,
             image=image_pil, mask_image=pipe_mask_pil, control_image=control_image_pil,
             controlnet_conditioning_scale=STABLE_CN_SCALE, num_inference_steps=40,
             guidance_scale=6.0, strength=STABLE_STRENGTH, generator=generator
         ).images[0]
+        
+        # Unregister hook
+        hook_handle.remove()
+        
+        # Record features
+        for step, feat in hook.features_extracted:
+            all_feature_vectors.append(feat)
+            all_feature_labels.append(celeb)
         
         # --- Restoration for both ---
         def process_output(output_pil, title):
@@ -218,8 +282,90 @@ def run_single_image_test(pipe, image_path):
     Image.fromarray(grid).save(grid_path)
     print(f"Comparison Grid saved: {grid_path}")
 
+def plot_3d_features(coords, labels, algo_name, save_path):
+    from sklearn.metrics import silhouette_score
+    
+    eng_label_map = {
+        "고윤정": "Go Yoon-jung",
+        "신세경": "Shin Se-kyung",
+        "홍수주": "Hong Su-zu"
+    }
+    mapped_labels = np.array([eng_label_map.get(l, l) for l in labels])
+    unique_labels = sorted(list(set(mapped_labels)))
+    colors = ['#FF4B4B', '#00C0A3', '#3B82F6']
+    color_map = {name: colors[i] for i, name in enumerate(unique_labels)}
+    
+    try:
+        score = silhouette_score(coords, mapped_labels)
+        print(f"  - {algo_name} Silhouette Score: {score:.4f}")
+        title_score = f" (Silhouette Score: {score:.4f})"
+    except Exception as e:
+        print(f"  - Could not compute Silhouette Score: {e}")
+        title_score = ""
+        
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    for label_name in unique_labels:
+        mask = (mapped_labels == label_name)
+        ax.scatter(
+            coords[mask, 0], coords[mask, 1], coords[mask, 2],
+            c=color_map[label_name], label=label_name,
+            alpha=0.8, edgecolors='none', s=60
+        )
+        
+    ax.set_title(f"3D UNet Image Feature Space ({algo_name}){title_score}", fontsize=12, fontweight='bold')
+    ax.set_xlabel("Dim 1")
+    ax.set_ylabel("Dim 2")
+    ax.set_zlabel("Dim 3")
+    ax.legend(loc='upper right', framealpha=0.9)
+    
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    ax.xaxis.pane.set_edgecolor('w')
+    ax.yaxis.pane.set_edgecolor('w')
+    ax.zaxis.pane.set_edgecolor('w')
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"Saved {algo_name} visualization to: {save_path}")
+
+def plot_and_save_visualizations(feature_vectors, labels):
+    from sklearn.decomposition import PCA
+    from sklearn.manifold import TSNE
+    
+    feature_vectors = np.array(feature_vectors)
+    labels = np.array(labels)
+    
+    vis_dir = os.path.join(root_path, "tests/data/eyebrow_visualize")
+    os.makedirs(vis_dir, exist_ok=True)
+    
+    # 1. 3D PCA
+    print("\nPerforming 3D PCA on UNet features...")
+    pca = PCA(n_components=3, random_state=42)
+    coords_pca = pca.fit_transform(feature_vectors)
+    plot_3d_features(coords_pca, labels, "PCA", os.path.join(vis_dir, "unet_latent_space_pca.png"))
+    
+    # 2. 3D t-SNE
+    print("\nPerforming 3D t-SNE on UNet features...")
+    perp = min(8, max(2, len(feature_vectors) // 3))
+    tsne = TSNE(n_components=3, perplexity=perp, max_iter=1000, random_state=42)
+    coords_tsne = tsne.fit_transform(feature_vectors)
+    plot_3d_features(coords_tsne, labels, "t-SNE", os.path.join(vis_dir, "unet_latent_space_tsne.png"))
+
 if __name__ == "__main__":
     test_pipe = load_pipeline()
     all_imgs = sorted([f for f in os.listdir(input_images_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
+    
+    # Run the comparison grids loop
     for img_file in all_imgs[:10]:
         run_single_image_test(test_pipe, os.path.join(input_images_dir, img_file))
+        
+    # Generate 3D feature visualization maps directly
+    if len(all_feature_vectors) > 0:
+        print(f"\n🎉 Generation finished! Extracted {len(all_feature_vectors)} UNet feature vectors.")
+        plot_and_save_visualizations(all_feature_vectors, all_feature_labels)
+    else:
+        print("\n⚠️ No feature vectors were collected.")

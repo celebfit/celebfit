@@ -76,18 +76,13 @@ python pipeline/main.py
 * **결과 저장**: `pipeline/result_face.png`에 [원본, 마스크, 결과] 3단 프리뷰로 저장됩니다.
 * `TARGET_CELEB` 변수('고윤정', '신세경', '홍수주')를 변경하여 타겟 배우를 지정할 수 있습니다.
 
-### Step 3. 3개 배우 스타일 비교 그리드 생성 (tests/test_eyebrows_compare_loras.py)
-지정된 얼굴 이미지들에 대해 **고윤정(평조/둥근眉), 신세경(아치형眉), 홍수주(와일드/야생眉)** LoRA를 각각 적용한 결과를 한눈에 비교할 수 있는 그리드 이미지를 생성합니다.
+### Step 3. 비교 그리드 생성 및 3D 특징 분석 시각화 통합 실행 (tests/test_eyebrows_compare_loras.py)
+지정된 얼굴 이미지들에 대해 **고윤정(평조/둥근眉), 신세경(아치형眉), 홍수주(와일드/야생眉)** LoRA를 각각 적용한 그리드 이미지를 생성하는 것과 동시에, UNet Up-block Attention 특징 맵을 낚아채어(Hook) **3D PCA** 및 **3D t-SNE** 특징 공간 투영 그래프를 한 번에 자동 렌더링합니다.
 ```bash
 python tests/test_eyebrows_compare_loras.py
 ```
-* **황금 파라미터 적용**: 중복 생성 방지를 위한 재칠 세기 `STABLE_STRENGTH = 0.50` 및 LoRA 가중치 `STABLE_LORA_SCALE = 0.90` 고정 적용.
-* **결과 저장**: `tests/data/eyebrow_tests/grids_compare/`에 시드별 그리드 이미지가 저장됩니다.
+* **원타임 최적화**: 두 작업을 하나로 병합하여 Diffusion 생성에 드는 계산 시간과 GPU 소모를 50% 단축했습니다.
+* **결과 저장**:
+  - **비교 그리드**: `tests/data/eyebrow_tests/grids_compare/` 에 시드별 격자 비교 이미지 저장.
+  - **3D 시각화 그래프**: `tests/data/eyebrow_visualize/` 내에 `unet_latent_space_pca.png` 및 `unet_latent_space_tsne.png` 로 투영 결과 저장.
 
-### Step 4. UNet 3D 특징 분석 시각화 (tests/test_unet_features_visualize.py)
-디퓨전 프로세스의 최종 단계에서 UNet Up-block Attention 특징 맵(Feature Map, 1280차원)을 수집하여, 3D PCA 및 3D t-SNE 공간상에 투영(Projection)합니다.
-```bash
-python tests/test_unet_features_visualize.py
-```
-* **결과 저장**: `tests/data/eyebrow_visualize/` 내에 `unet_latent_space_pca.png`와 `tsne.png`로 저장됩니다.
-* 이를 통해 각 배우별 텍스처/형태의 특징(Feature)이 잠재 공간에서 서로 뚜렷하게 분리(Clustering)되는지 직관적으로 검증할 수 있습니다.

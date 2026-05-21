@@ -8,28 +8,33 @@ from PIL import Image
 # Ensure we can import local modules
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_path)
-sys.path.insert(0, os.path.join(root_path, "brushnet/src"))
 
 from util.smooth_mask import smooth_mask
 from util.dilate_mask import dilate_mask
+from util.crop_face import get_crop_info, apply_crop, restore_crop
 from masking_bisenet.generate_mask_bisenet import generate_bisenet_face_parts_mask
-from diffusers import StableDiffusionBrushNetPipeline, BrushNetModel, UniPCMultistepScheduler
+from diffusers import StableDiffusionInpaintPipeline, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
+from transformers import CLIPTextModel, CLIPTokenizer
+from peft import PeftModel
 
 #======= Configuration
-# Model paths (Ensure you have downloaded these)
-base_model_path = "runwayml/stable-diffusion-v1-5" 
-brushnet_path = os.path.join(root_path, "data/ckpt/brushnetx")
+# Base realistic checkpoint (automatically cached from HuggingFace)
+base_model_path = "emilianJR/epiCRealism" 
+
+# Choose target celebrity: '고윤정' (Go Youn Jung), '신세경' (Shin Se Kyung), or '홍수주' (Hong Su Zu)
+TARGET_CELEB = "고윤정"
 
 # Inputs
-image_path = os.path.join(root_path, "data/raw_face_data/seed1056395.png")      # Path to your original image
+image_path = os.path.join(root_path, "data/raw_face_data/seed1056395.png")
 output_path = os.path.join(root_path, "pipeline/result_face.png")
-prompt = '''RAW photo, a close up portrait of a face, highly detailed, natural skin texture, 
-            realistic lighting, 8k uhd, dslr, soft lighting, high quality, film grain, 
-            beautiful thick natural eyebrows'''
-negative_prompt = "low quality, distorted, blurry, messy, ugly"
 
-# Face parts to refine: lips, nose, left_eyebrow, right_eyebrow, eyebrows, eyes
-target_parts = ["eyebrows"]
+# Inpainting Hyperparameters
+STABLE_STRENGTH = 0.50
+STABLE_LORA_SCALE = 0.90
+
+# Prompt construction
+prompt = f"a photo of {TARGET_CELEB} style eyebrows, highly detailed, natural hair texture, masterpiece, 8k uhd"
+negative_prompt = "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, purple patches, colorful noise, hard edges"
 
 #======= Device Setup (Mac MPS / CUDA / CPU)
 if torch.cuda.is_available():
@@ -37,125 +42,113 @@ if torch.cuda.is_available():
     dtype = torch.float16
 elif torch.backends.mps.is_available():
     device = "mps"
-    dtype = torch.float32 # MPS often has precision issues with float16
+    dtype = torch.float32
 else:
     device = "cpu"
     dtype = torch.float32
 
 def run_pipeline():
-    #======= 1. Load Models
-    print(f"Loading BrushNet on {device}...")
-    try:
-        brushnet = BrushNetModel.from_pretrained(brushnet_path, torch_dtype=dtype)
-        pipe = StableDiffusionBrushNetPipeline.from_pretrained(
-            base_model_path, brushnet=brushnet, torch_dtype=dtype, low_cpu_mem_usage=False, safety_checker=None
-        )
-    except Exception as e:
-        print(f"Error loading models: {e}")
-        print("Please ensure checkpoints exist in 'data/ckpt/'")
-        return
-
+    #======= 1. Load Models & Pipelines
+    print(f"Loading base model {base_model_path} on {device}...")
+    
+    text_encoder = CLIPTextModel.from_pretrained(base_model_path, subfolder="text_encoder", torch_dtype=dtype)
+    vae = AutoencoderKL.from_pretrained(base_model_path, subfolder="vae", torch_dtype=dtype)
+    unet = UNet2DConditionModel.from_pretrained(base_model_path, subfolder="unet", torch_dtype=dtype)
+    
+    pipe = StableDiffusionInpaintPipeline.from_pretrained(
+        base_model_path, text_encoder=text_encoder, vae=vae, unet=unet,
+        torch_dtype=dtype, low_cpu_mem_usage=True, safety_checker=None
+    )
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+    pipe.to(device)
 
-    if device == "cuda":
-        pipe.enable_model_cpu_offload()
+    #======= 2. Load Unified/Individual LoRA
+    # Check for the unified LoRA model first, fallback to individual if not trained yet
+    unified_lora_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
+    individual_lora_path = os.path.join(root_path, f"data/ckpt/{TARGET_CELEB}_eyebrows_pro_v2")
+    
+    if os.path.exists(os.path.join(unified_lora_path, "unet")):
+        pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(unified_lora_path, "unet"), adapter_name="celebs")
+        pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(unified_lora_path, "text_encoder"), adapter_name="celebs")
+        pipe.set_adapters(["celebs"], adapter_weights=[STABLE_LORA_SCALE])
+        print(f"✅ Loaded Unified LoRA Adapter with scale {STABLE_LORA_SCALE}")
+    elif os.path.exists(os.path.join(individual_lora_path, "unet")):
+        pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(individual_lora_path, "unet"), adapter_name="celebs")
+        pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(individual_lora_path, "text_encoder"), adapter_name="celebs")
+        pipe.set_adapters(["celebs"], adapter_weights=[STABLE_LORA_SCALE])
+        print(f"✅ Loaded Individual {TARGET_CELEB} LoRA Adapter with scale {STABLE_LORA_SCALE}")
     else:
-        pipe.to(device)
-        pipe.enable_attention_slicing()
-        pipe.enable_vae_slicing()
+        print("⚠️ Warning: No pre-trained LoRA adapter found in data/ckpt/. Proceeding without LoRA.")
 
-    #======= 2. Data Prepare & Generate Mask
-    print(f"Processing image and generating mask for: {target_parts}")
+    #======= 3. Prepare Image & Generate Mask
+    print(f"Generating eyebrows mask for: {TARGET_CELEB}")
     original_bgr = cv2.imread(image_path)
     if original_bgr is None:
         print(f"Error: Could not find input image at {image_path}")
         return
 
-    # Generate face part mask using BiSeNet
-    raw_mask = generate_bisenet_face_parts_mask(original_bgr, parts=target_parts)
-    
-    # Post-process mask for better blending
+    # Generate eyebrow mask using BiSeNet
+    raw_mask = generate_bisenet_face_parts_mask(original_bgr, parts=["eyebrows"])
     processed_mask = smooth_mask(raw_mask)
-    processed_mask = dilate_mask(processed_mask, pixels=5)
+    processed_mask = dilate_mask(processed_mask, pixels=4)
 
-    # Prepare for BrushNet
-    # BrushNet input is the original image + a binary mask
-    rgb_image = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2RGB)
+    # Crop target face area locally for stable generation scale (resolves scale mismatch)
+    h, w = original_bgr.shape[:2]
+    crop_info = get_crop_info(processed_mask, original_bgr.shape, target_size=512)
     
-    # SD 1.5 works best with 512x512; 1024x1024 causes Mac OOM and distorted generations
-    h, w = rgb_image.shape[:2]
-    image_512 = cv2.resize(rgb_image, (512, 512))
-    mask_512 = cv2.resize(processed_mask, (512, 512), interpolation=cv2.INTER_NEAREST)
+    # 512x512 Local Crops
+    image_512 = apply_crop(original_bgr, crop_info, target_size=512)
+    mask_512 = apply_crop(processed_mask, crop_info, target_size=512)
+    
+    # Preprocess Image & Mask for Pipeline
+    image_pil = Image.fromarray(cv2.cvtColor(image_512, cv2.COLOR_BGR2RGB))
+    mask_pil = Image.fromarray(mask_512).convert("L")
 
-    # Force binarization (0 or 255) for smooth edge masks, as BrushNet requires strict 0/1 Masks.
-    # Otherwise, semi-transparent edges will cause "ghosting" artifacts during BrushNet feature extraction.
-    mask_512_binary = (mask_512 > 127).astype(np.uint8) * 255
-
-    # The region to be inpainted (facial features) MUST be blacked out in the original image
-    mask_3ch_512 = mask_512_binary[:, :, np.newaxis] / 255.0
-    masked_image_512 = (image_512 * (1.0 - mask_3ch_512)).astype(np.uint8)
-
-    image_pil = Image.fromarray(masked_image_512).convert("RGB")
-    # Mask polarity: White (255) indicates regions to modify, Black (0) indicates regions to preserve
-    mask_pil = Image.fromarray(mask_512_binary).convert("RGB")
-
-    #======= 3. BrushNet Inference
-    print("Generating new facial features (512x512)...")
+    #======= 4. Inference
+    print(f"Inpainting new eyebrows via StableDiffusionInpaintPipeline (Strength: {STABLE_STRENGTH})...")
     generator = torch.Generator(device).manual_seed(42)
+    
+    # Enable LoRA scaling safely
+    pipe.unet.set_adapter("celebs")
+    pipe.text_encoder.set_adapter("celebs")
 
-    output = pipe(
+    output_512_pil = pipe(
         prompt=prompt,
         negative_prompt=negative_prompt,
         image=image_pil,
-        mask=mask_pil,
-        num_inference_steps=50,
-        generator=generator,
-        brushnet_conditioning_scale=1.0
+        mask_image=mask_pil,
+        strength=STABLE_STRENGTH,
+        num_inference_steps=25,
+        generator=generator
     ).images[0]
 
-    #======= 4. Integrate Result (Blending)
-    print("Blending output with original image...")
-    # Resize the generated 512x512 image back to the original image dimensions
-    result_np_512 = np.array(output)
-    result_np = cv2.resize(result_np_512, (w, h))
+    #======= 5. Integrate & Restore Back to Full Image
+    output_512_bgr = cv2.cvtColor(np.array(output_512_pil), cv2.COLOR_RGB2BGR)
     
-    mask_np = np.array(processed_mask).astype(np.float32) / 255.0
+    # Restore the local 512 patch back to original resolution
+    restored_full = restore_crop(output_512_bgr, crop_info, original_bgr.shape)
+    restored_mask = restore_crop(mask_512, crop_info, original_bgr.shape)
+
+    # Soft alpha-blending
+    mask_np = restored_mask.astype(np.float32) / 255.0
     if len(mask_np.shape) == 2:
         mask_np = mask_np[:, :, np.newaxis]
-
-    # Use Gaussian blur on mask for seamless transition
-    mask_blurred = cv2.GaussianBlur(mask_np, (21, 21), 0)
+    mask_blurred = cv2.GaussianBlur(mask_np, (15, 15), 0)
     if len(mask_blurred.shape) == 2:
         mask_blurred = mask_blurred[:, :, np.newaxis]
 
-    # Linear interpolation between original and result based on blurred mask
-    final_np = (result_np * mask_blurred + rgb_image * (1.0 - mask_blurred)).astype(np.uint8)
-    
-    #======= 5. Create Comparison & Save Result
-    print("Creating comparison image...")
-    # Convert mask to 3-channel RGB for stacking
-    mask_3ch = cv2.cvtColor(processed_mask, cv2.COLOR_GRAY2RGB)
-    
-    # Scale down to avoid creating a massive image (e.g. 3072x1024)
+    final_np = (restored_full * mask_blurred + original_bgr * (1.0 - mask_blurred)).astype(np.uint8)
+
+    #======= 6. Create Preview & Save
     scale = 0.5
     new_size = (int(w * scale), int(h * scale))
-    preview_original = cv2.resize(rgb_image, new_size)
-    preview_mask = cv2.resize(mask_3ch, new_size)
-    preview_raw_gen = cv2.resize(result_np_512, new_size) # Raw generation from diffusion model
-    preview_final = cv2.resize(final_np, new_size)
-    
-    # Add text labels
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(preview_original, "Original", (10, 30), font, 1, (0, 255, 0), 2)
-    cv2.putText(preview_mask, "Mask", (10, 30), font, 1, (0, 255, 0), 2)
-    cv2.putText(preview_raw_gen, "Raw Gen", (10, 30), font, 1, (0, 255, 0), 2)
-    cv2.putText(preview_final, "Result", (10, 30), font, 1, (0, 255, 0), 2)
+    preview_orig = cv2.resize(original_bgr, new_size)
+    preview_mask = cv2.resize(cv2.cvtColor(processed_mask, cv2.COLOR_GRAY2BGR), new_size)
+    preview_res = cv2.resize(final_np, new_size)
 
-    comparison = np.hstack((preview_original, preview_mask, preview_raw_gen, preview_final))
-    comparison_image = Image.fromarray(comparison)
-
-    comparison_image.save(output_path)
-    print(f"Done! Comparison result saved to {output_path}")
+    comparison = np.hstack((preview_orig, preview_mask, preview_res))
+    cv2.imwrite(output_path, comparison)
+    print(f"🎉 Success! Result saved to {output_path}")
 
 if __name__ == "__main__":
     run_pipeline()

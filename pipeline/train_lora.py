@@ -47,6 +47,9 @@ MIN_SNR_GAMMA = 5.0
 
 class EyebrowDatasetPro(Dataset):
     def __init__(self, base_path, target, size=512, augment=True):
+        import glob
+        from pathlib import Path
+
         self.base_path = base_path
         self.celebs = ['신세경', '고윤정', '홍수주'] if target == 'all' else [target]
         self.size = size
@@ -59,8 +62,32 @@ class EyebrowDatasetPro(Dataset):
             mask_base_dir = os.path.join(base_path, f"{celeb}_mask")
             extracted_dir = os.path.join(mask_base_dir, "extracted")
             tight_mask_dir = os.path.join(mask_base_dir, "tight")
+            padded_2px_dir = os.path.join(mask_base_dir, "padded_2px")
+            raw_actor_dir = os.path.abspath(os.path.join(base_path, "..", "actor_raw_data", celeb))
 
             if not os.path.exists(extracted_dir): continue
+
+            # Build a mapping from computed stem-name back to raw image file
+            raw_paths = []
+            image_extensions = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+            if os.path.exists(raw_actor_dir):
+                for ext in image_extensions:
+                    raw_paths.extend(glob.glob(os.path.join(raw_actor_dir, f"*{ext}")))
+                    raw_paths.extend(glob.glob(os.path.join(raw_actor_dir, f"*{ext.upper()}")))
+
+            stem_counts = {}
+            for p in raw_paths:
+                p_path = Path(p)
+                stem_counts[p_path.stem] = stem_counts.get(p_path.stem, 0) + 1
+
+            stem_to_raw = {}
+            for p in raw_paths:
+                p_path = Path(p)
+                if stem_counts[p_path.stem] == 1:
+                    computed_stem = p_path.stem
+                else:
+                    computed_stem = f"{p_path.stem}_{p_path.suffix.lower().lstrip('.')}"
+                stem_to_raw[computed_stem] = p
 
             for fname in os.listdir(extracted_dir):
                 if not fname.endswith('_tight_white_bg.png'): continue
@@ -68,12 +95,42 @@ class EyebrowDatasetPro(Dataset):
                 base_name = fname.replace('_tight_white_bg.png', '')
                 e_p = os.path.join(extracted_dir, fname)
                 m_p = os.path.join(tight_mask_dir, f"{base_name}_tight_mask.png")
+                
+                # Dilated mask (for edge blending learning)
+                m_p_2px = os.path.join(padded_2px_dir, f"{base_name}_padded_2px_mask.png")
+                if not os.path.exists(m_p_2px):
+                    m_p_2px = m_p
 
-                # 配对逻辑: extracted作为训练图像，tight作为mask
-                if os.path.exists(m_p) and os.path.exists(e_p):
-                    celeb_data[celeb].append({"img": e_p, "mask": m_p, "celeb": celeb})
+                raw_img_path = stem_to_raw.get(base_name)
 
-        # 进行数据量平衡
+                # Pair and combine data aspects:
+                # 1. Pure Eyebrow (White BG + Tight Mask)
+                if os.path.exists(e_p) and os.path.exists(m_p):
+                    celeb_data[celeb].append({
+                        "img_path": e_p,
+                        "mask_path": m_p,
+                        "celeb": celeb,
+                        "is_white_bg": True
+                    })
+
+                    # If matched raw face image exists:
+                    if raw_img_path and os.path.exists(raw_img_path):
+                        # 2. Face Context (Raw Face + Tight Mask)
+                        celeb_data[celeb].append({
+                            "img_path": raw_img_path,
+                            "mask_path": m_p,
+                            "celeb": celeb,
+                            "is_white_bg": False
+                        })
+                        # 3. Edge Blending (Raw Face + Padded 2px Mask)
+                        celeb_data[celeb].append({
+                            "img_path": raw_img_path,
+                            "mask_path": m_p_2px,
+                            "celeb": celeb,
+                            "is_white_bg": False
+                        })
+
+        # Dataset Balancing
         if len(self.celebs) > 1:
             max_samples = max(len(items) for items in celeb_data.values())
             print(f"📊 Dataset Balancing: Target max samples per celebrity = {max_samples}")
@@ -98,19 +155,25 @@ class EyebrowDatasetPro(Dataset):
 
     def __getitem__(self, idx):
         item = self.data_list[idx]
-        img = cv2.cvtColor(cv2.imread(item["img"]), cv2.COLOR_BGR2RGB)
-        mask = cv2.imread(item["mask"], cv2.IMREAD_GRAYSCALE)
+        img = cv2.cvtColor(cv2.imread(item["img_path"]), cv2.COLOR_BGR2RGB)
+        mask = cv2.imread(item["mask_path"], cv2.IMREAD_GRAYSCALE)
         
         _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
 
+        is_white_bg = item["is_white_bg"]
+
         if self.augment:
-            # 🚀 应用数据增强：随机水平翻转与轻微色彩扰动
             img, mask = augment_image_and_mask(img, mask)
-            # 🚀 应用随机变焦裁剪与平移，提升空间位置鲁棒性
-            crop_info = get_random_zoom_crop_info(mask, img.shape)
+            # Use tight crop for white_bg close-ups, wide crop for raw face context
+            if is_white_bg:
+                crop_info = get_random_zoom_crop_info(mask, img.shape, min_padding=1.8, max_padding=2.6, max_shift=15)
+            else:
+                crop_info = get_random_zoom_crop_info(mask, img.shape, min_padding=3.5, max_padding=4.5, max_shift=20)
         else:
-            # 确定性变焦裁剪
-            crop_info = get_zoom_crop_info(mask, img.shape, padding_ratio=2.2)
+            if is_white_bg:
+                crop_info = get_zoom_crop_info(mask, img.shape, padding_ratio=2.2)
+            else:
+                crop_info = get_zoom_crop_info(mask, img.shape, padding_ratio=4.0)
 
         cropped_img = apply_crop(img, crop_info, self.size)
         cropped_mask = apply_crop(mask, crop_info, self.size)
@@ -140,11 +203,11 @@ def train_pro():
     
     vae.requires_grad_(False)
     
-    # 2. LoRA Config (同时微调 UNet 和 Text Encoder)
-    unet_lora_config = LoraConfig(r=16, lora_alpha=32, target_modules=["to_k", "to_q", "to_v", "to_out.0"], bias="none")
+    # 2. LoRA Config (Rank 128, 同时微调 UNet 和 Text Encoder)
+    unet_lora_config = LoraConfig(r=128, lora_alpha=128, target_modules=["to_k", "to_q", "to_v", "to_out.0"], bias="none")
     unet = get_peft_model(unet, unet_lora_config)
     
-    text_lora_config = LoraConfig(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "out_proj"], bias="none")
+    text_lora_config = LoraConfig(r=128, lora_alpha=128, target_modules=["q_proj", "k_proj", "v_proj", "out_proj"], bias="none")
     text_encoder = get_peft_model(text_encoder, text_lora_config)
     
     # 3. Data

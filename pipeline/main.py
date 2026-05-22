@@ -8,12 +8,13 @@ from PIL import Image
 # Ensure we can import local modules
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_path)
+sys.path.insert(0, os.path.join(root_path, "brushnet/src"))
 
 from util.smooth_mask import smooth_mask
 from util.dilate_mask import dilate_mask
-from util.crop_face import get_crop_info, apply_crop, restore_crop
+from util.crop_face import get_crop_info, apply_crop, restore_crop, get_actor_face_crop_info
 from masking_bisenet.generate_mask_bisenet import generate_bisenet_face_parts_mask
-from diffusers import StableDiffusionInpaintPipeline, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
+from diffusers import StableDiffusionControlNetInpaintPipeline, ControlNetModel, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
 from transformers import CLIPTextModel, CLIPTokenizer
 from peft import PeftModel
 
@@ -29,12 +30,14 @@ image_path = os.path.join(root_path, "data/raw_face_data/seed1056395.png")
 output_path = os.path.join(root_path, "pipeline/result_face.png")
 
 # Inpainting Hyperparameters
-STABLE_STRENGTH = 0.50
-STABLE_LORA_SCALE = 0.90
+STABLE_STRENGTH = 0.60
+STABLE_LORA_SCALE = 1.15
+STABLE_CN_SCALE = 0.4
+controlnet_id = "lllyasviel/sd-controlnet-canny"
 
 # Prompt construction
-prompt = f"a photo of {TARGET_CELEB} style eyebrows, highly detailed, natural hair texture, masterpiece, 8k uhd"
-negative_prompt = "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, purple patches, colorful noise, hard edges"
+prompt = f"a photo of {TARGET_CELEB} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
+negative_prompt = "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, purple patches, colorful noise, hard edges, dirty skin"
 
 #======= Device Setup (Mac MPS / CUDA / CPU)
 if torch.cuda.is_available():
@@ -47,38 +50,68 @@ else:
     device = "cpu"
     dtype = torch.float32
 
+def get_canny_guide(image_np):
+    img = cv2.Canny(image_np, 100, 200)
+    img = img[:, :, None]
+    img = np.concatenate([img, img, img], axis=2)
+    return Image.fromarray(img)
+
+def color_transfer(src, ref, mask):
+    bg_mask = (mask == 0)
+    if not np.any(bg_mask): return src
+    src_lab = cv2.cvtColor(src, cv2.COLOR_BGR2LAB).astype(np.float32)
+    ref_lab = cv2.cvtColor(ref, cv2.COLOR_BGR2LAB).astype(np.float32)
+    for i in range(3):
+        src_channel = src_lab[:, :, i]
+        ref_channel = ref_lab[:, :, i]
+        mean_src, std_src = src_channel[bg_mask].mean(), src_channel[bg_mask].std()
+        mean_ref, std_ref = ref_channel[bg_mask].mean(), ref_channel[bg_mask].std()
+        if std_src > 1e-5:
+            src_lab[:, :, i] = (src_channel - mean_src) * (std_ref / std_src) + mean_ref
+        else:
+            src_lab[:, :, i] = src_channel - mean_src + mean_ref
+    return cv2.cvtColor(np.clip(src_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
 def run_pipeline():
     #======= 1. Load Models & Pipelines
-    print(f"Loading base model {base_model_path} on {device}...")
+    print(f"Loading base model {base_model_path} and Canny ControlNet on {device}...")
     
     text_encoder = CLIPTextModel.from_pretrained(base_model_path, subfolder="text_encoder", torch_dtype=dtype)
     vae = AutoencoderKL.from_pretrained(base_model_path, subfolder="vae", torch_dtype=dtype)
     unet = UNet2DConditionModel.from_pretrained(base_model_path, subfolder="unet", torch_dtype=dtype)
+    controlnet = ControlNetModel.from_pretrained(controlnet_id, torch_dtype=dtype)
     
-    pipe = StableDiffusionInpaintPipeline.from_pretrained(
-        base_model_path, text_encoder=text_encoder, vae=vae, unet=unet,
+    pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
+        base_model_path, controlnet=controlnet, text_encoder=text_encoder, vae=vae, unet=unet,
         torch_dtype=dtype, low_cpu_mem_usage=True, safety_checker=None
     )
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     pipe.to(device)
 
     #======= 2. Load Unified/Individual LoRA
-    # Check for the unified LoRA model first, fallback to individual if not trained yet
-    unified_lora_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
+    # Check for the unified LoRA model first (V4), fallback to V2 or individual if not trained yet
+    unified_lora_path = os.path.join(root_path, "lora_checkpoint/celeb_eyebrows_all_pro_v4")
+    unified_lora_v2_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
     individual_lora_path = os.path.join(root_path, f"data/ckpt/{TARGET_CELEB}_eyebrows_pro_v2")
     
+    selected_lora_path = None
     if os.path.exists(os.path.join(unified_lora_path, "unet")):
-        pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(unified_lora_path, "unet"), adapter_name="celebs")
-        pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(unified_lora_path, "text_encoder"), adapter_name="celebs")
-        pipe.set_adapters(["celebs"], adapter_weights=[STABLE_LORA_SCALE])
-        print(f"✅ Loaded Unified LoRA Adapter with scale {STABLE_LORA_SCALE}")
+        selected_lora_path = unified_lora_path
+        print(f"✅ Selected Unified V4 LoRA checkpoint.")
+    elif os.path.exists(os.path.join(unified_lora_v2_path, "unet")):
+        selected_lora_path = unified_lora_v2_path
+        print(f"✅ Selected Unified V2 LoRA checkpoint (fallback).")
     elif os.path.exists(os.path.join(individual_lora_path, "unet")):
-        pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(individual_lora_path, "unet"), adapter_name="celebs")
-        pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(individual_lora_path, "text_encoder"), adapter_name="celebs")
+        selected_lora_path = individual_lora_path
+        print(f"✅ Selected Individual {TARGET_CELEB} LoRA checkpoint (fallback).")
+        
+    if selected_lora_path is not None:
+        pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(selected_lora_path, "unet"), adapter_name="celebs")
+        pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(selected_lora_path, "text_encoder"), adapter_name="celebs")
         pipe.set_adapters(["celebs"], adapter_weights=[STABLE_LORA_SCALE])
-        print(f"✅ Loaded Individual {TARGET_CELEB} LoRA Adapter with scale {STABLE_LORA_SCALE}")
+        print(f"✅ Loaded LoRA Adapter from {selected_lora_path} with scale {STABLE_LORA_SCALE}")
     else:
-        print("⚠️ Warning: No pre-trained LoRA adapter found in data/ckpt/. Proceeding without LoRA.")
+        print("⚠️ Warning: No pre-trained LoRA adapter found. Proceeding without LoRA.")
 
     #======= 3. Prepare Image & Generate Mask
     print(f"Generating eyebrows mask for: {TARGET_CELEB}")
@@ -87,25 +120,33 @@ def run_pipeline():
         print(f"Error: Could not find input image at {image_path}")
         return
 
-    # Generate eyebrow mask using BiSeNet
+    # Generate eyebrow mask using BiSeNet (dilated and smoothed for clean blending boundaries)
     raw_mask = generate_bisenet_face_parts_mask(original_bgr, parts=["eyebrows"])
-    processed_mask = smooth_mask(raw_mask)
-    processed_mask = dilate_mask(processed_mask, pixels=4)
+    raw_mask_base = dilate_mask(raw_mask, pixels=15)
+    processed_mask = smooth_mask(raw_mask_base)
 
     # Crop target face area locally for stable generation scale (resolves scale mismatch)
     h, w = original_bgr.shape[:2]
-    crop_info = get_crop_info(processed_mask, original_bgr.shape, target_size=512)
+    crop_info = get_actor_face_crop_info(processed_mask, original_bgr.shape, padding_ratio=4.0)
     
     # 512x512 Local Crops
     image_512 = apply_crop(original_bgr, crop_info, target_size=512)
-    mask_512 = apply_crop(processed_mask, crop_info, target_size=512)
+    mask_512_binary = apply_crop(processed_mask, crop_info, target_size=512)
+    
+    # Telea Fill to completely erase eyebrows from the input image to avoid concealer patches
+    textured_fill = cv2.inpaint(image_512, mask_512_binary, 3, cv2.INPAINT_TELEA)
+    mask_3ch_smooth = np.repeat(smooth_mask(mask_512_binary)[:, :, np.newaxis], 3, axis=2).astype(np.float32) / 255.0
+    masked_image_512 = (image_512 * (1.0 - mask_3ch_smooth) + textured_fill * mask_3ch_smooth).astype(np.uint8)
     
     # Preprocess Image & Mask for Pipeline
-    image_pil = Image.fromarray(cv2.cvtColor(image_512, cv2.COLOR_BGR2RGB))
-    mask_pil = Image.fromarray(mask_512).convert("L")
+    image_pil = Image.fromarray(cv2.cvtColor(masked_image_512, cv2.COLOR_BGR2RGB))
+    pipe_mask_pil = Image.new("RGB", (512, 512), "white")
+    
+    # Canny edge guide from the original crop (preserves original eyebrow geometric shape)
+    control_image_pil = get_canny_guide(image_512)
 
     #======= 4. Inference
-    print(f"Inpainting new eyebrows via StableDiffusionInpaintPipeline (Strength: {STABLE_STRENGTH})...")
+    print(f"Generating eyebrows via StableDiffusionControlNetInpaintPipeline (Strength: {STABLE_STRENGTH})...")
     generator = torch.Generator(device).manual_seed(42)
     
     # Enable LoRA scaling safely
@@ -116,20 +157,26 @@ def run_pipeline():
         prompt=prompt,
         negative_prompt=negative_prompt,
         image=image_pil,
-        mask_image=mask_pil,
+        mask_image=pipe_mask_pil,
+        control_image=control_image_pil,
+        controlnet_conditioning_scale=STABLE_CN_SCALE,
         strength=STABLE_STRENGTH,
-        num_inference_steps=25,
+        num_inference_steps=40,
+        guidance_scale=6.0,
         generator=generator
     ).images[0]
 
     #======= 5. Integrate & Restore Back to Full Image
     output_512_bgr = cv2.cvtColor(np.array(output_512_pil), cv2.COLOR_RGB2BGR)
     
+    # Color transfer to match the tone of the generated patch with the original face
+    corrected_bgr_512 = color_transfer(output_512_bgr, image_512, mask_512_binary)
+    
     # Restore the local 512 patch back to original resolution
-    restored_full = restore_crop(output_512_bgr, crop_info, original_bgr.shape)
-    restored_mask = restore_crop(mask_512, crop_info, original_bgr.shape)
+    restored_full = restore_crop(corrected_bgr_512, crop_info, original_bgr.shape)
+    restored_mask = restore_crop(mask_512_binary, crop_info, original_bgr.shape[:2])
 
-    # Soft alpha-blending
+    # Soft alpha-blending using smoothed mask to prevent visible edges
     mask_np = restored_mask.astype(np.float32) / 255.0
     if len(mask_np.shape) == 2:
         mask_np = mask_np[:, :, np.newaxis]

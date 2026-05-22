@@ -17,8 +17,8 @@ sys.path.insert(0, os.path.join(root_path, "brushnet/src"))
 from masking_bisenet.generate_mask_bisenet import generate_bisenet_face_parts_mask
 from util.dilate_mask import dilate_mask
 from util.smooth_mask import smooth_mask
-from util.crop_face import get_crop_info, apply_crop, restore_crop
-from diffusers import StableDiffusionInpaintPipeline, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
+from util.crop_face import get_crop_info, apply_crop, restore_crop, get_actor_face_crop_info
+from diffusers import StableDiffusionControlNetInpaintPipeline, ControlNetModel, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
 from transformers import CLIPTextModel
 import transformers
 if not hasattr(transformers, 'CLIPFeatureExtractor'):
@@ -26,7 +26,8 @@ if not hasattr(transformers, 'CLIPFeatureExtractor'):
 
 #======= Configuration
 base_model_path = "emilianJR/epiCRealism" 
-unified_lora_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
+controlnet_id = "lllyasviel/sd-controlnet-canny"
+unified_lora_path = os.path.join(root_path, "lora_checkpoint/celeb_eyebrows_all_pro_v4")
 
 #======= Paths and Setup
 input_images_dir = os.path.join(root_path, "data/raw_face_data")
@@ -34,11 +35,11 @@ output_dir = os.path.join(root_path, "tests/data/eyebrow_tests")
 os.makedirs(output_dir, exist_ok=True)
 
 #======= Golden Parameters
-STABLE_STRENGTH = 0.50
-STABLE_CN_SCALE = 0
-STABLE_LORA_SCALE = 0.90
+STABLE_STRENGTH = 0.60
+STABLE_CN_SCALE = 0.4
+STABLE_LORA_SCALE = 1.15
 
-UNIFIED_PROMPT_TEMPLATE = "a photo of {celeb} style eyebrows, highly detailed, natural hair texture, masterpiece, 8k uhd"
+UNIFIED_PROMPT_TEMPLATE = "a photo of {celeb} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
 UNIFIED_NEGATIVE_PROMPT = "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, blurry, plastic, purple patches, colorful noise, burnt, high contrast, hard edges, dirty skin"
 
 comparison_cases = [
@@ -114,6 +115,23 @@ def get_canny_guide(image_np):
     img = np.concatenate([img, img, img], axis=2)
     return Image.fromarray(img)
 
+def color_transfer(src, ref, mask):
+    bg_mask = (mask == 0)
+    if not np.any(bg_mask): return src
+    src_lab = cv2.cvtColor(src, cv2.COLOR_BGR2LAB).astype(np.float32)
+    ref_lab = cv2.cvtColor(ref, cv2.COLOR_BGR2LAB).astype(np.float32)
+    for i in range(3):
+        src_channel = src_lab[:, :, i]
+        ref_channel = ref_lab[:, :, i]
+        mean_src, std_src = src_channel[bg_mask].mean(), src_channel[bg_mask].std()
+        mean_ref, std_ref = ref_channel[bg_mask].mean(), ref_channel[bg_mask].std()
+        if std_src > 1e-5:
+            src_lab[:, :, i] = (src_channel - mean_src) * (std_ref / std_src) + mean_ref
+        else:
+            src_lab[:, :, i] = src_channel - mean_src + mean_ref
+    return cv2.cvtColor(np.clip(src_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
 #======= Device Setup
 if torch.cuda.is_available():
     device = "cuda"; dtype = torch.float16
@@ -126,38 +144,22 @@ def load_pipeline():
     print(f"Loading models on {device}...")
     backbone = DiffusionBackbone(model_id=base_model_path, dtype=dtype)
     text_encoder, vae, unet = backbone.load_modules()
+    controlnet = ControlNetModel.from_pretrained(controlnet_id, torch_dtype=dtype)
     
-    pipe = StableDiffusionInpaintPipeline.from_pretrained(
-        base_model_path, text_encoder=text_encoder, vae=vae, unet=unet,
+    pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
+        base_model_path, controlnet=controlnet, text_encoder=text_encoder, vae=vae, unet=unet,
         torch_dtype=dtype, low_cpu_mem_usage=True, safety_checker=None
     )
     
     from peft import PeftModel
-    loaded_any = False
     
-    # 1. Load UNIFIED LoRA model "all"
+    # Load UNIFIED LoRA model "all"
     if os.path.exists(os.path.join(unified_lora_path, "unet")):
         pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(unified_lora_path, "unet"), adapter_name="all_celebs")
         pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(unified_lora_path, "text_encoder"), adapter_name="all_celebs")
-        loaded_any = True
         print("✅ Loaded UNIFIED LoRA model (all celebs)")
-    
-    # 2. Load INDIVIDUAL LoRA models
-    for celeb in ["고윤정", "신세경", "홍수주"]:
-        lora_path = os.path.join(root_path, f"data/ckpt/{celeb}_eyebrows_pro_v2")
-        unet_path = os.path.join(lora_path, "unet")
-        te_path = os.path.join(lora_path, "text_encoder")
-        
-        if os.path.exists(unet_path):
-            ind_adapter_name = f"ind_{celeb}"
-            if not loaded_any:
-                pipe.unet = PeftModel.from_pretrained(pipe.unet, unet_path, adapter_name=ind_adapter_name)
-                pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, te_path, adapter_name=ind_adapter_name)
-                loaded_any = True
-            else:
-                pipe.unet.load_adapter(unet_path, adapter_name=ind_adapter_name)
-                pipe.text_encoder.load_adapter(te_path, adapter_name=ind_adapter_name)
-            print(f"✅ Loaded INDIVIDUAL LoRA model for: {celeb}")
+    else:
+        print("⚠️ Warning: Unified LoRA model not found!")
     
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     if device != "cuda":
@@ -181,7 +183,7 @@ def run_single_image_test(pipe, image_path):
     raw_mask_base = smooth_mask(raw_mask_base)
     
     # Pre-calculate Mask and Crop
-    crop_info = get_crop_info(raw_mask_base, original_bgr.shape, target_size=512)
+    crop_info = get_actor_face_crop_info(raw_mask_base, original_bgr.shape, padding_ratio=4.0)
     image_512 = apply_crop(original_bgr, crop_info, target_size=512)
     mask_512_binary = apply_crop(raw_mask_base, crop_info, target_size=512)
     
@@ -203,29 +205,17 @@ def run_single_image_test(pipe, image_path):
         display_name = case["display_name"]
         current_prompt = UNIFIED_PROMPT_TEMPLATE.format(celeb=celeb)
         
-        ind_adapter_name = f"ind_{celeb}"
         all_adapter_name = "all_celebs"
         
         generator = torch.Generator(device).manual_seed(42)
         
-        # --- Generation 1: Individual LoRA ---
-        if hasattr(pipe.unet, "peft_config") and ind_adapter_name in pipe.unet.peft_config:
-            pipe.enable_lora()
-            pipe.set_adapters([ind_adapter_name], adapter_weights=[STABLE_LORA_SCALE])
-        else:
-            if hasattr(pipe, "disable_lora"):
-                pipe.disable_lora()
-                
-        output_ind = pipe(
-            prompt=current_prompt, negative_prompt=UNIFIED_NEGATIVE_PROMPT,
-            image=image_pil, mask_image=pipe_mask_pil, control_image=control_image_pil,
-            controlnet_conditioning_scale=STABLE_CN_SCALE, num_inference_steps=40,
-            guidance_scale=6.0, strength=STABLE_STRENGTH, generator=generator
-        ).images[0]
-        
-        # --- Generation 2: All LoRA (and Capture UNet Attention Features) ---
+        # --- Generation: All LoRA (and Capture UNet Attention Features) ---
         if hasattr(pipe.unet, "peft_config") and all_adapter_name in pipe.unet.peft_config:
-            pipe.enable_lora()
+            if hasattr(pipe, "enable_lora"):
+                pipe.enable_lora()
+            pipe.unet.set_adapter(all_adapter_name)
+            if hasattr(pipe, "text_encoder") and hasattr(pipe.text_encoder, "peft_config") and all_adapter_name in pipe.text_encoder.peft_config:
+                pipe.text_encoder.set_adapter(all_adapter_name)
             pipe.set_adapters([all_adapter_name], adapter_weights=[STABLE_LORA_SCALE])
         else:
             if hasattr(pipe, "disable_lora"):
@@ -251,25 +241,27 @@ def run_single_image_test(pipe, image_path):
             all_feature_vectors.append(feat)
             all_feature_labels.append(celeb)
         
-        # --- Restoration for both ---
+        # --- Restoration ---
         def process_output(output_pil, title):
             result_np_512 = np.array(output_pil)
-            full_result_np = restore_crop(cv2.cvtColor(result_np_512, cv2.COLOR_RGB2BGR), crop_info, original_bgr.shape)
+            result_bgr_512 = cv2.cvtColor(result_np_512, cv2.COLOR_RGB2BGR)
+            corrected_bgr_512 = color_transfer(result_bgr_512, image_512, mask_512_binary)
+            full_result_np = restore_crop(corrected_bgr_512, crop_info, original_bgr.shape)
             mask_float = smooth_mask(raw_mask_base).astype(np.float32) / 255.0
             mask_3d = np.repeat(mask_float[:, :, np.newaxis], 3, axis=2)
             final_result_bgr = (original_bgr.astype(np.float32) * (1 - mask_3d) + full_result_np.astype(np.float32) * mask_3d).astype(np.uint8)
-            preview = cv2.resize(cv2.cvtColor(final_result_bgr, cv2.COLOR_BGR2RGB), (512, 512))
+            # Crop the final blended result for grid preview (keeps it close-up and highly readable)
+            blended_cropped = apply_crop(final_result_bgr, crop_info, target_size=512)
+            preview = cv2.cvtColor(blended_cropped, cv2.COLOR_BGR2RGB)
             cv2.putText(preview, title, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
             return preview
 
-        preview_ind = process_output(output_ind, f"{display_name} (Ind)")
-        preview_all = process_output(output_all, f"{display_name} (All)")
+        preview_all = process_output(output_all, f"{display_name}")
         
-        results.append(preview_ind)
         results.append(preview_all)
 
     # 3. Save Grid
-    preview_orig = cv2.resize(cv2.cvtColor(original_bgr, cv2.COLOR_BGR2RGB), (512, 512))
+    preview_orig = cv2.resize(cv2.cvtColor(image_512, cv2.COLOR_BGR2RGB), (512, 512))
     cv2.putText(preview_orig, "Original", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
     
     preview_mask_vis = cv2.cvtColor(apply_crop(raw_mask_base, crop_info, 512), cv2.COLOR_GRAY2RGB)

@@ -1,5 +1,12 @@
 import os
 import sys
+
+# Ensure we can import local modules and submodules
+root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+sys.path.insert(0, os.path.join(root_path, "brushnet/src"))
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -12,11 +19,7 @@ from peft import LoraConfig, get_peft_model
 from tqdm.auto import tqdm
 from diffusers.optimization import get_scheduler
 
-root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if root_path not in sys.path:
-    sys.path.insert(0, root_path)
-
-from util.crop_face import get_zoom_crop_info, apply_crop
+from util.crop_face import get_zoom_crop_info, apply_crop, get_actor_face_crop_info, get_random_actor_face_crop_info
 from util.dilate_mask import dilate_mask
 from util.invert_mask import invert_mask
 from util.augment import augment_image_and_mask, get_random_zoom_crop_info
@@ -168,23 +171,28 @@ class EyebrowDatasetPro(Dataset):
             if is_white_bg:
                 crop_info = get_random_zoom_crop_info(mask, img.shape, min_padding=1.8, max_padding=2.6, max_shift=15)
             else:
-                crop_info = get_random_zoom_crop_info(mask, img.shape, min_padding=3.5, max_padding=4.5, max_shift=20)
+                crop_info = get_random_actor_face_crop_info(mask, img.shape, min_padding=3.6, max_padding=4.4, max_shift=15)
         else:
             if is_white_bg:
                 crop_info = get_zoom_crop_info(mask, img.shape, padding_ratio=2.2)
             else:
-                crop_info = get_zoom_crop_info(mask, img.shape, padding_ratio=4.0)
+                crop_info = get_actor_face_crop_info(mask, img.shape, padding_ratio=4.0)
 
         cropped_img = apply_crop(img, crop_info, self.size)
         cropped_mask = apply_crop(mask, crop_info, self.size)
 
-        # 学习边缘过渡
-        final_mask = dilate_mask(cropped_mask, pixels=6)
+        # 学习边缘过渡 (根据是否是白底，动态调整 Mask 膨胀大小与训练 Prompt)
+        if is_white_bg:
+            final_mask = dilate_mask(cropped_mask, pixels=4)
+            prompt = f"a close-up photo of {item['celeb']} style eyebrows isolated on a pure white background"
+        else:
+            final_mask = dilate_mask(cropped_mask, pixels=15)
+            prompt = f"a photo of {item['celeb']} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
 
         return {
             "pixel_values": torch.from_numpy(cropped_img).permute(2, 0, 1).float() / 127.5 - 1.0,
             "masks": torch.from_numpy(final_mask).unsqueeze(0).float() / 255.0,
-            "prompt": f"a photo of {item['celeb']} style eyebrows, highly detailed, realistic skin texture"
+            "prompt": prompt
         }
 
 # ==========================================

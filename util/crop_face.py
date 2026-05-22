@@ -70,6 +70,95 @@ def get_zoom_crop_info(mask, image_shape, padding_ratio=2.5):
         
     return (x1, y1, int(side), int(side))
 
+def get_actor_face_crop_info(mask, image_shape, padding_ratio=4.0, vertical_offset_ratio=0.08):
+    """
+    根据“额头中线-双眼下方-太阳穴两侧”的比例计算裁切区域。
+    基于眉毛的 bounding box 进行计算，并向下偏移以包含双眼。
+    """
+    h, w = image_shape[:2]
+    y_indices, x_indices = np.where(mask > 0)
+    
+    if len(x_indices) == 0:
+        return (0, 0, w, h) # 兜底全图
+        
+    min_x, max_x = np.min(x_indices), np.max(x_indices)
+    min_y, max_y = np.min(y_indices), np.max(y_indices)
+    bw = max_x - min_x
+    bh = max_y - min_y
+    
+    # 太阳穴两侧的宽度通常是眉毛宽度的 4.0 倍左右（对应于包含完整眼眉和眼部区域的方形）
+    side = int(bw * padding_ratio)
+    
+    # 中心点：水平居中，垂直方向向下偏移（以覆盖“双眼下方”并保持“额头中线”在上方）
+    cx = (min_x + max_x) // 2
+    cy = (min_y + max_y) // 2
+    cy_offset = int(bw * vertical_offset_ratio)
+    cy_new = cy + cy_offset
+    
+    x1 = int(cx - side // 2)
+    y1 = int(cy_new - side // 2)
+    
+    # 边界限制与保持正方形
+    x1 = max(0, x1)
+    y1 = max(0, y1)
+    
+    if x1 + side > w:
+        x1 = max(0, int(w - side))
+        side = min(side, w)
+    if y1 + side > h:
+        y1 = max(0, int(h - side))
+        side = min(side, h)
+        
+    return (x1, y1, int(side), int(side))
+
+def get_random_actor_face_crop_info(mask, image_shape, min_padding=3.6, max_padding=4.4, max_shift=15):
+    """
+    用于数据增强的随机裁切版本（针对原人脸图像，匹配“额头中线-双眼下方-太阳穴两侧”）。
+    """
+    h, w = image_shape[:2]
+    y_indices, x_indices = np.where(mask > 0)
+    
+    if len(x_indices) == 0:
+        return (0, 0, w, h)
+        
+    min_x, max_x = np.min(x_indices), np.max(x_indices)
+    min_y, max_y = np.min(y_indices), np.max(y_indices)
+    bw = max_x - min_x
+    bh = max_y - min_y
+    
+    padding_ratio = np.random.uniform(min_padding, max_padding)
+    side = int(bw * padding_ratio)
+    
+    cx = (min_x + max_x) // 2
+    cy = (min_y + max_y) // 2
+    
+    # 垂直偏移随机微调：0.06 到 0.10
+    vertical_offset_ratio = np.random.uniform(0.06, 0.10)
+    cy_offset = int(bw * vertical_offset_ratio)
+    cy_new = cy + cy_offset
+    
+    # 随机中心偏移 (Data Augmentation)
+    shift_x = np.random.randint(-max_shift, max_shift + 1)
+    shift_y = np.random.randint(-max_shift, max_shift + 1)
+    
+    cx += shift_x
+    cy_new += shift_y
+    
+    x1 = int(cx - side // 2)
+    y1 = int(cy_new - side // 2)
+    
+    x1 = max(0, x1)
+    y1 = max(0, y1)
+    
+    if x1 + side > w:
+        x1 = max(0, int(w - side))
+        side = min(side, w)
+    if y1 + side > h:
+        y1 = max(0, int(h - side))
+        side = min(side, h)
+        
+    return (x1, y1, int(side), int(side))
+
 def apply_crop(image, crop_info, target_size=512):
     """
     裁切并缩放到 target_size。

@@ -207,3 +207,7 @@ celebfit_app/ios/Pods/
 celebfit_app/ios/.symlinks/
 celebfit_app/android/.gradle/
 celebfit_app/android/local.properties
+
+# HTML preview runtime copies (do not commit)
+celebfit_app/preview/.serve/
+celebfit_app/preview/mock/

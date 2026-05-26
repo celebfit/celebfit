@@ -7,20 +7,25 @@
 | **main** | ML / 눈썹 변환 파이프라인 | `pipeline/`, `masking_bisenet/`, `lora_checkpoint/` |
 | **app** | main + 앱·API·배포 | `api/`, `celebfit_app/`, `deploy/`, `scripts/` |
 
-**main에만 push하면 app/RunPod에 자동 반영되지 않습니다.** app에 merge해야 합니다.
+**main에 push하면 GitHub Action이 `app`에 자동 merge·push합니다** (main 브랜치는 건드리지 않음).
 
 ---
 
-## 방법 1: GitHub Action (권장)
+## 방법 1: GitHub Action (자동, 권장)
 
 `main`에 push되면 [.github/workflows/sync-main-to-app.yml](.github/workflows/sync-main-to-app.yml)이  
-**main → app merge PR**을 자동 생성합니다.
+**main → app merge 후 `app`에 push**합니다.
 
-1. GitHub에서 PR **Sync main → app** 확인
-2. 충돌 없으면 **Merge**
+1. 팀원이 `main`에 push
+2. Actions **Sync main into app** 완료 확인 (보통 1~2분)
 3. RunPod Pod **Stop → Start** (또는 Pod에서 `git fetch && git reset --hard origin/app`)
 
+**merge 충돌** 시에만 PR이 자동 생성됩니다 → 충돌 해결 후 merge.
+
 수동 실행: Actions → **Sync main into app** → **Run workflow**
+
+> `app` 브랜치 보호 규칙이 있으면 Actions bot push를 허용해야 합니다.  
+> Settings → Branches → `app` → **Allow specified actors to bypass** → `github-actions[bot]`
 
 ---
 

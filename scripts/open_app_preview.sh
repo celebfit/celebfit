@@ -6,14 +6,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PREVIEW="$ROOT/celebfit_app/preview"
+APP_ROOT="$ROOT/celebfit_app"
+PREVIEW_PAGE="preview/index.html"
 API_URL="${1:-}"
 PORT="${PREVIEW_PORT:-8765}"
 PID_FILE="/tmp/celebfit-preview-${PORT}.pid"
 LOG_FILE="/tmp/celebfit-preview.log"
 
-if [[ ! -f "$PREVIEW/index.html" ]]; then
-  echo "Preview not found: $PREVIEW/index.html" >&2
+if [[ ! -f "$APP_ROOT/$PREVIEW_PAGE" ]]; then
+  echo "Preview not found: $APP_ROOT/$PREVIEW_PAGE" >&2
   exit 1
 fi
 
@@ -37,18 +38,18 @@ stop_preview() {
 }
 
 start_preview() {
-  if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/index.html" >/dev/null 2>&1; then
+  if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/${PREVIEW_PAGE}" >/dev/null 2>&1; then
     return 0
   fi
   stop_preview
   echo "Starting preview server on http://127.0.0.1:${PORT}"
   (
-    cd "$PREVIEW"
+    cd "$APP_ROOT"
     exec python3 -m http.server "$PORT" --bind 127.0.0.1
   ) >"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
   for _ in $(seq 1 20); do
-    if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/index.html" >/dev/null 2>&1; then
+    if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/${PREVIEW_PAGE}" >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.25
@@ -66,7 +67,7 @@ if [[ -n "$API_URL" ]]; then
   QUERY="?api=${API_URL}"
 fi
 
-OPEN_URL="http://127.0.0.1:${PORT}/index.html${QUERY}"
+OPEN_URL="http://127.0.0.1:${PORT}/${PREVIEW_PAGE}${QUERY}"
 echo "Open: $OPEN_URL"
 open "$OPEN_URL" 2>/dev/null || xdg-open "$OPEN_URL" 2>/dev/null || true
 

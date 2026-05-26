@@ -8,6 +8,22 @@
 
 ---
 
+## 브랜치 & 문서 안내
+
+| 브랜치 | 역할 | 주요 경로 |
+|--------|------|-----------|
+| **main** | ML / 눈썹 변환 파이프라인 | `pipeline/`, `masking_bisenet/`, `lora_checkpoint/` |
+| **app** | main + Flutter 앱 + FastAPI + RunPod 배포 | `celebfit_app/`, `api/`, `deploy/`, `scripts/` |
+
+| 목적 | 문서 |
+|------|------|
+| **앱을 브라우저에서 실행** | 아래 [앱 브라우저 실행](#-앱-브라우저-실행-app-브랜치) |
+| API ↔ Flutter 연동 | [INTEGRATION.md](./INTEGRATION.md) |
+| RunPod GPU 배포 | [RUNPOD.md](./RUNPOD.md) |
+| main → app 자동 동기화 | [SYNC_BRANCHES.md](./SYNC_BRANCHES.md) |
+
+---
+
 ## 📦 의존성 패키지 (Dependencies)
 
 ### 핵심 의존성
@@ -303,3 +319,156 @@ def run_pipeline(image_bytes: bytes, celeb: str, pipe, lama, device) -> bytes
 | **FastAPI** | 비동기 지원, 자동 Swagger 문서, 가장 적합 |
 | **Gradio** | 빠른 프로토타입, UI 자동 생성 (데모용) |
 | **Streamlit** | 간단한 인터랙티브 대시보드 (내부 테스트용) |
+
+---
+
+## 📱 앱 브라우저 실행 (app 브랜치)
+
+`app` 브랜치에서 celebfit UI를 브라우저로 실행하는 방법입니다.  
+Flutter 설치 없이 **HTML 미리보기**로 바로 확인하는 것을 권장합니다.
+
+### 전체 흐름
+
+```mermaid
+flowchart LR
+  subgraph Browser["브라우저"]
+    A["HTML 미리보기\ncelebfit_app/preview/"]
+    B["Flutter Web\n(선택)"]
+  end
+  subgraph Backend["백엔드 API"]
+    C["로컬 FastAPI\n:8000"]
+    D["RunPod GPU Pod\nproxy.runpod.net"]
+  end
+  subgraph ML["AI 파이프라인"]
+    E["MediaPipe 마스크"]
+    F["LaMa 눈썹 제거"]
+    G["SD Inpaint + LoRA"]
+  end
+
+  User((사용자)) -->|1. 사진 업로드| A
+  User -->|1. 사진 업로드| B
+  A -->|2. POST /api/v1/apply| C
+  A -->|2. POST /api/v1/apply| D
+  B --> C
+  B --> D
+  C --> E --> F --> G
+  D --> E --> F --> G
+  G -->|3. before/after JPEG| A
+  G -->|3. before/after JPEG| B
+  A -->|4. Before/After 슬라이더| User
+```
+
+**사용자 시나리오 (4단계)**
+
+1. **홈** — 셀카 업로드
+2. **분석** — UI만 (mock 데이터, API 미연동)
+3. **스타일** — 고윤정 / 신세경 / 홍수주 선택 → **적용하기** → API 호출
+4. **결과** — Before/After 슬라이더로 변환 결과 확인
+
+---
+
+### 방법 1: HTML 미리보기 (권장 · Flutter 불필요)
+
+저장소 루트에서 한 줄로 실행합니다.
+
+```bash
+git checkout app
+./scripts/open_app_preview.sh
+```
+
+브라우저가 `http://127.0.0.1:8765/preview/index.html` 을 엽니다.
+
+| 단계 | 동작 |
+|------|------|
+| 1 | 상단 배너에서 API **연결됨** / **미연결** 확인 |
+| 2 | **홈** → 사진 업로드 |
+| 3 | **스타일** → 연예인 스타일 선택 → **적용하기** |
+| 4 | **결과** → Before/After 슬라이더 |
+
+**RunPod GPU API 연동** (실제 AI 변환):
+
+```bash
+./scripts/open_app_preview.sh https://YOUR_POD_ID-8000.proxy.runpod.net
+```
+
+또는 미리보기 **MY 탭**에서 RunPod URL을 저장하면 `localStorage`에 유지됩니다.
+
+**로컬 API만 쓸 때** (Mac에서 GPU/MPS 테스트):
+
+```bash
+# 터미널 1 — API
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r api/requirements.txt
+export PYTHONPATH=$PWD
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# 터미널 2 — 브라우저 미리보기
+./scripts/open_app_preview.sh
+```
+
+API 상태 확인:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+> API 미연결 시에도 UI는 **데모 모드**로 동작합니다. 실제 AI 변환은 RunPod 또는 로컬 API 연결이 필요합니다.
+
+---
+
+### 방법 2: Flutter Web (Chrome)
+
+네이티브 앱과 동일한 Flutter UI를 Chrome에서 실행합니다. Flutter SDK가 필요합니다.
+
+```bash
+cd celebfit_app
+flutter pub get
+flutter create . --org com.celebfit --project-name celebfit_app --platforms=web   # 최초 1회
+flutter run -d chrome
+```
+
+API Base URL 지정:
+
+```bash
+flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
+# RunPod:
+flutter run -d chrome --dart-define=API_BASE_URL=https://YOUR_POD_ID-8000.proxy.runpod.net
+```
+
+| 플랫폼 | 기본 API URL |
+|--------|----------------|
+| Chrome / iOS / macOS | `http://127.0.0.1:8000` |
+| Android 에뮬레이터 | `http://10.0.2.2:8000` |
+
+---
+
+### 방법 3: RunPod만 사용 (로컬 API 없음)
+
+1. [RUNPOD.md](./RUNPOD.md)대로 Pod 배포 (`app` 브랜치)
+2. `./scripts/verify_runpod_api.sh https://YOUR_POD_ID-8000.proxy.runpod.net` 로 health 확인
+3. `./scripts/open_app_preview.sh https://YOUR_POD_ID-8000.proxy.runpod.net`
+
+---
+
+### app 브랜치 파일 점검 (불필요·중복 정리)
+
+| 항목 | 조치 | 이유 |
+|------|------|------|
+| `celebfit_app/preview/mock/` | **삭제 · gitignore** | `preview/index.html`과 100% 동일한 임시 복사본 |
+| `celebfit_app/preview/.serve/` | **삭제 · gitignore** | 로컬 서버 실행 시 생기는 런타임 복사본 |
+| `celebfit_app/preview/assets/celebs/` | **삭제** | `celebfit_app/assets/celebs/`와 동일 이미지 중복 (~380KB×3) |
+| `brushnet/` (430+ 파일) | **유지** (main merge) | main에서 자동 sync되며, 현재 API 런타임에서는 **미사용** |
+| `pipeline/outputs/`, `weights/` | **gitignore** | 실행 시 생성되는 런타임 산출물 |
+
+**유지해야 하는 app 전용 경로**
+
+```
+celebfit_app/          # Flutter 앱 + HTML 미리보기
+├── preview/index.html # 브라우저 UI (Flutter 없이 실행)
+├── assets/celebs/     # 스타일 썸네일 (Flutter·미리보기 공용)
+api/                   # FastAPI 백엔드
+deploy/                # RunPod/Docker 배포
+scripts/open_app_preview.sh
+```
+
+main 팀원이 `main`에 push하면 [SYNC_BRANCHES.md](./SYNC_BRANCHES.md)의 GitHub Action이 **app에 자동 merge**합니다. main 브랜치는 수정하지 않습니다.

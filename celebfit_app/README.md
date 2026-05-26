@@ -14,16 +14,31 @@ AI 눈썹 스타일 매칭 앱 — Flutter UI
 
 ## 실행 방법
 
+### 브라우저 (가장 빠름, Flutter 불필요)
+
+저장소 루트에서:
+
+```bash
+./scripts/open_app_preview.sh
+# RunPod API:
+./scripts/open_app_preview.sh https://YOUR_POD_ID-8000.proxy.runpod.net
+```
+
+자세한 흐름·API 연동·RunPod 설정은 루트 [README.md](../README.md#-앱-브라우저-실행-app-브랜치) 참고.
+
+### Flutter (iOS / Android / Chrome)
+
 ```bash
 cd celebfit_app
 flutter pub get
 flutter run
 ```
 
-iOS 시뮬레이터 / Android 에뮬레이터 / Chrome:
+Chrome:
 
 ```bash
-flutter run -d chrome   # 웹에서 빠르게 UI 확인
+flutter create . --org com.celebfit --project-name celebfit_app --platforms=web   # 최초 1회
+flutter run -d chrome
 ```
 
 ## 프로젝트 구조

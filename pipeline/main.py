@@ -182,11 +182,11 @@ def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
     
     # 1. Mask Generation on original face
     raw_mask_base = generate_bisenet_face_parts_mask(original_bgr, parts=["eyebrows"])
-    raw_mask_base = dilate_mask(raw_mask_base, pixels=15)
+    raw_mask_base = dilate_mask(raw_mask_base, pixels=5)
     raw_mask_base = smooth_mask(raw_mask_base)
     
     # 2. Crop to 512x512 (Using closer zoom crop for higher detail resolution)
-    crop_info = get_zoom_crop_info(raw_mask_base, original_bgr.shape, padding_ratio=1.3, min_size=512)
+    crop_info = get_zoom_crop_info(raw_mask_base, original_bgr.shape, padding_ratio=1.0, min_size=512)
     image_512 = apply_crop(original_bgr, crop_info, target_size=512)
     mask_512_binary = apply_crop(raw_mask_base, crop_info, target_size=512)
     
@@ -249,7 +249,7 @@ def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
     if np.sum(new_raw_mask) == 0:
         new_processed_mask = mask_512_binary
     else:
-        new_raw_mask_base = dilate_mask(new_raw_mask, pixels=15)
+        new_raw_mask_base = dilate_mask(new_raw_mask, pixels=5)
         new_processed_mask = smooth_mask(new_raw_mask_base)
 
     # Restore the new crop mask back to original resolution (2D shape)

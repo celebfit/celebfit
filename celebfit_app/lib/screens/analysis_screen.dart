@@ -202,7 +202,10 @@ class AnalysisScreen extends StatelessWidget {
                       PrimaryButton(
                         label: '추천 스타일 보기',
                         icon: Icons.arrow_forward_rounded,
-                        onPressed: () => context.read<AppState>().setTab(2),
+                        onPressed: () {
+                          context.read<AppState>().setRecommendedStyleFromAnalysis();
+                          context.read<AppState>().setTab(2);
+                        },
                       ),
                     ],
                   ),

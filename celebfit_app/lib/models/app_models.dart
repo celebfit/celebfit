@@ -33,7 +33,7 @@ const kFemaleEyebrowStyles = [
     id: 'go_yoonjung',
     name: '고윤정',
     subtitle: '자연형',
-    description: '가늘고 부드러운 라인. 생기 있으면서도 편안한 인상.',
+    description: '가늘고 정돈된 라인. 맑고 단정한 무드.',
     tags: ['자연스러운'],
     mockColor: Color(0xFFC4A882),
     gender: CelebGender.female,
@@ -44,7 +44,7 @@ const kFemaleEyebrowStyles = [
     id: 'shin_sekyung',
     name: '신세경',
     subtitle: '세미 아치',
-    description: '은은한 아치 곡선. 또렷하지만 세련된 분위기.',
+    description: '은은한 아치 곡선. 청순하고 세련된 내추럴 무드.',
     tags: ['자연스러운', '또렷한 인상'],
     mockColor: Color(0xFF8888A0),
     gender: CelebGender.female,
@@ -55,7 +55,7 @@ const kFemaleEyebrowStyles = [
     id: 'hong_sooju',
     name: '홍수주',
     subtitle: '직선형',
-    description: '깔끔한 일자 라인. 단정하고 시크한 느낌.',
+    description: '깔끔한 일자 라인. 미니멀하고 시크한 인상.',
     tags: ['또렷한 인상'],
     mockColor: Color(0xFFA07878),
     gender: CelebGender.female,
@@ -113,6 +113,7 @@ const kApiEyebrowStyles = kFemaleEyebrowStyles;
 
 class CelebrityMatch {
   const CelebrityMatch({
+    required this.styleId,
     required this.name,
     required this.styleLabel,
     required this.percent,
@@ -120,6 +121,7 @@ class CelebrityMatch {
     this.showCrown = false,
   });
 
+  final String styleId;
   final String name;
   final String styleLabel;
   final int percent;
@@ -127,8 +129,20 @@ class CelebrityMatch {
   final bool showCrown;
 }
 
+EyebrowStyle? eyebrowStyleById(String id) {
+  for (final style in kFemaleEyebrowStyles) {
+    if (style.id == id) return style;
+  }
+  return null;
+}
+
+EyebrowStyle get kRecommendedEyebrowStyle {
+  return eyebrowStyleById(kMockCelebrityMatches.first.styleId)!;
+}
+
 const kMockCelebrityMatches = [
   CelebrityMatch(
+    styleId: 'go_yoonjung',
     name: '고윤정',
     styleLabel: '자연형',
     percent: 82,
@@ -136,12 +150,14 @@ const kMockCelebrityMatches = [
     showCrown: true,
   ),
   CelebrityMatch(
+    styleId: 'shin_sekyung',
     name: '신세경',
     styleLabel: '세미 아치',
     percent: 76,
     previewAsset: 'assets/celebs/shin_sekyung.jpg',
   ),
   CelebrityMatch(
+    styleId: 'hong_sooju',
     name: '홍수주',
     styleLabel: '직선형',
     percent: 71,

@@ -139,6 +139,7 @@ class StylePreviewCard extends StatelessWidget {
     this.imageBytes,
     this.enabled = true,
     this.isLoading = false,
+    this.isRecommended = false,
     this.compact = false,
   });
 
@@ -150,6 +151,7 @@ class StylePreviewCard extends StatelessWidget {
   final VoidCallback onApply;
   final bool enabled;
   final bool isLoading;
+  final bool isRecommended;
   final bool compact;
 
   @override
@@ -160,30 +162,37 @@ class StylePreviewCard extends StatelessWidget {
     return _buildListCard();
   }
 
-  Widget _buildPreviewImage() {
+  Widget _buildPreviewImage({Alignment alignment = Alignment.topCenter, double scale = 1.0}) {
+    Widget image;
     if (previewAsset != null) {
       if (previewAsset!.toLowerCase().endsWith('.svg')) {
-        return SvgPicture.asset(
+        image = SvgPicture.asset(
           previewAsset!,
           fit: BoxFit.cover,
-          alignment: Alignment.center,
+          alignment: alignment,
+          width: double.infinity,
+          height: double.infinity,
+        );
+      } else {
+        image = Image.asset(
+          previewAsset!,
+          fit: BoxFit.cover,
+          alignment: alignment,
+          filterQuality: FilterQuality.high,
           width: double.infinity,
           height: double.infinity,
         );
       }
-      return Image.asset(
-        previewAsset!,
-        fit: BoxFit.cover,
-        alignment: Alignment.topCenter,
-        filterQuality: FilterQuality.high,
-        width: double.infinity,
-        height: double.infinity,
-      );
+    } else if (imageBytes != null) {
+      image = Image.memory(imageBytes!, fit: BoxFit.cover, alignment: alignment);
+    } else {
+      return Container(color: AppColors.primarySoft, child: const _EyebrowPainterWidget());
     }
-    if (imageBytes != null) {
-      return Image.memory(imageBytes!, fit: BoxFit.cover, alignment: Alignment.topCenter);
+
+    if (scale != 1.0) {
+      image = Transform.scale(scale: scale, alignment: alignment, child: image);
     }
-    return Container(color: AppColors.primarySoft, child: const _EyebrowPainterWidget());
+    return image;
   }
 
   Widget _buildListCard() {
@@ -191,7 +200,10 @@ class StylePreviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: isRecommended ? AppColors.primary : AppColors.border,
+          width: isRecommended ? 1.5 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -205,15 +217,45 @@ class StylePreviewCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-            child: AspectRatio(aspectRatio: 16 / 9, child: _buildPreviewImage()),
+            child: SizedBox(
+              height: 118,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildPreviewImage(
+                    alignment: const Alignment(0, -0.16),
+                  ),
+                  if (isRecommended)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          '추천',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Column(
@@ -222,15 +264,15 @@ class StylePreviewCard extends StatelessWidget {
                           Text(
                             name,
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: enabled ? AppColors.textPrimary : AppColors.textMuted,
                             ),
                           ),
                           if (subtitle != null) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 3),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
                                 color: AppColors.primaryLight,
                                 borderRadius: BorderRadius.circular(999),
@@ -238,7 +280,7 @@ class StylePreviewCard extends StatelessWidget {
                               child: Text(
                                 subtitle!,
                                 style: const TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.primaryDark,
                                 ),
@@ -248,15 +290,15 @@ class StylePreviewCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    _ApplyButton(enabled: enabled, isLoading: isLoading, onApply: onApply),
+                    _ApplyButton(enabled: enabled, isLoading: isLoading, onApply: onApply, compact: true),
                   ],
                 ),
                 if (description != null) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Text(
                     description!,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       height: 1.45,
                       color: AppColors.textSecondary,
                     ),
@@ -335,22 +377,27 @@ class _ApplyButton extends StatelessWidget {
     required this.enabled,
     required this.isLoading,
     required this.onApply,
+    this.compact = false,
   });
 
   final bool enabled;
   final bool isLoading;
   final VoidCallback onApply;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: enabled ? AppColors.applyBtnBg : AppColors.chipBg,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(compact ? 7 : 8),
       child: InkWell(
         onTap: enabled && !isLoading ? onApply : null,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(compact ? 7 : 8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 8 : 10,
+            vertical: compact ? 4 : 6,
+          ),
           child: isLoading
               ? const SizedBox(
                   width: 14,
@@ -358,9 +405,9 @@ class _ApplyButton extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                 )
               : Text(
-                  enabled ? '적용하기' : '준비중',
+                  enabled ? (compact ? '적용' : '적용하기') : '준비중',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: compact ? 10 : 11,
                     fontWeight: FontWeight.w500,
                     color: enabled ? AppColors.textSecondary : AppColors.textMuted,
                   ),

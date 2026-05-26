@@ -269,30 +269,38 @@
     }
     .gender-tab.on { background: var(--surface); color: var(--primary); font-weight: 700; box-shadow: var(--shadow); }
     .style-list {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      display: flex; flex-direction: column; gap: 12px;
     }
     .style-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow);
       display: flex; flex-direction: column;
     }
+    .style-card.recommended { border-color: var(--primary); box-shadow: 0 0 0 1px rgba(142,122,181,.15); }
     .style-thumb {
-      aspect-ratio: 4/5; background: #f5f0ea; position: relative; overflow: hidden;
+      height: 118px; background: #f5f0ea; position: relative; overflow: hidden;
     }
     .style-thumb img {
-      width: 100%; height: 100%; object-fit: cover; object-position: center top;
+      width: 100%; height: 100%; object-fit: cover; object-position: center 42%;
       display: block; image-rendering: auto;
     }
-    .style-body { padding: 8px 10px 10px; margin-top: auto; }
-    .style-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; }
+    .style-body { padding: 10px 12px 12px; }
+    .style-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .style-meta { min-width: 0; flex: 1; }
     .style-name { font-size: 14px; font-weight: 700; display: block; line-height: 1.2; }
-    .style-celeb { display: block; margin-top: 2px; font-size: 10px; color: var(--nav-inactive); }
-    .style-badge { display: none; }
-    .style-desc { display: none; }
+    .style-celeb { display: block; font-size: 11px; color: var(--primary-dark); font-weight: 600; margin-bottom: 2px; }
+    .style-badge {
+      display: inline-block; margin-bottom: 6px; padding: 3px 8px; border-radius: 999px;
+      background: var(--primary); color: #fff; font-size: 10px; font-weight: 700;
+    }
+    .style-desc {
+      display: block; margin-top: 6px; font-size: 11px; line-height: 1.45; color: var(--muted);
+    }
     .style-apply {
-      padding: 6px 10px; border: none; border-radius: 8px;
+      padding: 4px 8px; border: none; border-radius: 7px;
       background: var(--apply-bg); color: var(--muted);
-      font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit; white-space: nowrap;
+      font-size: 10px; font-weight: 500; cursor: pointer; font-family: inherit;
+      white-space: nowrap; flex-shrink: 0;
     }
     .style-apply:disabled { opacity: .55; cursor: not-allowed; }
 
@@ -491,22 +499,9 @@
           </div>
           <div class="similarity-card">
             <h4>연예인 눈썹과 유사도 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/></svg></h4>
-            <div class="sim-cards">
-              <div class="sim-card top">
-                <div class="sim-card-photo"><span class="crown">👑</span><img src="../assets/celebs/go_yoonjung.jpg" alt="고윤정" /></div>
-                <div class="sim-card-body"><span class="style">자연형</span><span class="name">고윤정</span><div class="pct">82%</div></div>
-              </div>
-              <div class="sim-card">
-                <div class="sim-card-photo"><img src="../assets/celebs/shin_sekyung.jpg" alt="신세경" /></div>
-                <div class="sim-card-body"><span class="style">세미 아치</span><span class="name">신세경</span><div class="pct">76%</div></div>
-              </div>
-              <div class="sim-card">
-                <div class="sim-card-photo"><img src="../assets/celebs/hong_sooju.jpg" alt="홍수주" /></div>
-                <div class="sim-card-body"><span class="style">직선형</span><span class="name">홍수주</span><div class="pct">71%</div></div>
-              </div>
-            </div>
+            <div class="sim-cards"></div>
           </div>
-          <button class="btn btn-primary" style="flex-shrink:0;margin-top:10px" onclick="goTab('style')">추천 스타일 보기</button>
+          <button class="btn btn-primary" style="flex-shrink:0;margin-top:10px" onclick="goToStyleFromAnalysis()">추천 스타일 보기</button>
         </div>
       </div>
 
@@ -645,15 +640,21 @@
     }
 
     let API_BASE = resolveApiBase();
+    const CELEBRITY_MATCHES = [
+      { id:'go_yoonjung', name:'고윤정', styleLabel:'자연형', percent:82, image:'../assets/celebs/go_yoonjung.jpg', isBest:true },
+      { id:'shin_sekyung', name:'신세경', styleLabel:'세미 아치', percent:76, image:'../assets/celebs/shin_sekyung.jpg' },
+      { id:'hong_sooju', name:'홍수주', styleLabel:'직선형', percent:71, image:'../assets/celebs/hong_sooju.jpg' },
+    ];
     const FEMALE_STYLES = [
-      { id:'go_yoonjung', name:'고윤정', subtitle:'자연형', description:'가늘고 부드러운 라인. 생기 있으면서도 편안한 인상.', image:'../assets/celebs/go_yoonjung.jpg', apiEnabled:true, gender:'female' },
-      { id:'shin_sekyung', name:'신세경', subtitle:'세미 아치', description:'은은한 아치 곡선. 또렷하지만 세련된 분위기.', image:'../assets/celebs/shin_sekyung.jpg', apiEnabled:true, gender:'female' },
-      { id:'hong_sooju', name:'홍수주', subtitle:'직선형', description:'깔끔한 일자 라인. 단정하고 시크한 느낌.', image:'../assets/celebs/hong_sooju.jpg', apiEnabled:true, gender:'female' },
+      { id:'go_yoonjung', name:'고윤정', subtitle:'자연형', description:'가늘고 정돈된 라인. 맑고 단정한 무드.', image:'../assets/celebs/go_yoonjung.jpg', apiEnabled:true, gender:'female' },
+      { id:'shin_sekyung', name:'신세경', subtitle:'세미 아치', description:'은은한 아치 곡선. 청순하고 세련된 내추럴 무드.', image:'../assets/celebs/shin_sekyung.jpg', apiEnabled:true, gender:'female' },
+      { id:'hong_sooju', name:'홍수주', subtitle:'직선형', description:'깔끔한 일자 라인. 미니멀하고 시크한 인상.', image:'../assets/celebs/hong_sooju.jpg', apiEnabled:true, gender:'female' },
     ];
     const MALE_STYLES = [
       { id:'male_soon', name:'남성 스타일', subtitle:'준비중', description:'차분·또렷·내추럴 등 남성 연예인 눈썹 스타일을 준비하고 있습니다.', image:'', apiEnabled:false, gender:'male' },
     ];
     let currentGender='female';
+    let recommendedStyleId=null;
 
     let uploadedBlob=null, uploadedUrl=null, beforeUrl=null, afterUrl=null;
     let apiOnline=false;
@@ -664,26 +665,65 @@
       currentGender=g;
       document.getElementById('genderFemale').classList.toggle('on', g==='female');
       document.getElementById('genderMale').classList.toggle('on', g==='male');
-      document.getElementById('styleSectionHint').textContent =
-        g==='female' ? 'AI 변환 가능 · 여성 연예인 눈썹 스타일' : '남성 연예인 스타일 · 서비스 준비중';
       renderStyles();
     }
 
+    function sortedStyles(){
+      const styles=[...visibleStyles()];
+      if(!recommendedStyleId) return styles;
+      return styles.sort((a,b)=>{
+        if(a.id===recommendedStyleId) return -1;
+        if(b.id===recommendedStyleId) return 1;
+        return 0;
+      });
+    }
+
     function renderStyles() {
-      document.getElementById('styleGrid').innerHTML = visibleStyles().map(s=>`
-        <div class="style-card">
+      const styles=sortedStyles();
+      const hint=document.getElementById('styleSectionHint');
+      if(recommendedStyleId && currentGender==='female'){
+        const match=CELEBRITY_MATCHES.find(m=>m.id===recommendedStyleId);
+        hint.textContent=`분석 결과 · ${match?.name||''} 스타일 추천`;
+      } else {
+        hint.textContent=currentGender==='female'
+          ? 'AI 변환 가능 · 여성 연예인 눈썹 스타일'
+          : '남성 연예인 스타일 · 서비스 준비중';
+      }
+      document.getElementById('styleGrid').innerHTML = styles.map(s=>{
+        const isRecommended=s.id===recommendedStyleId;
+        return `
+        <div class="style-card${isRecommended?' recommended':''}">
           <div class="style-thumb">${s.image ? `<img src="${s.image}" alt="${s.name}" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">준비중</div>`}</div>
           <div class="style-body">
-            <div class="style-top">
-              <div>
-                <span class="style-name">${s.subtitle}</span>
+            ${isRecommended ? '<span class="style-badge">추천</span>' : ''}
+            <div class="style-head">
+              <div class="style-meta">
                 <span class="style-celeb">${s.name}</span>
+                <span class="style-name">${s.subtitle}</span>
               </div>
               <button class="style-apply" ${s.apiEnabled ? '' : 'disabled'}
-                onclick="applyStyle('${s.id}','${s.name}')">${s.apiEnabled ? '적용하기' : '준비중'}</button>
+                onclick="applyStyle('${s.id}','${s.name}')">${s.apiEnabled ? '적용' : '준비중'}</button>
             </div>
+            <span class="style-desc">${s.description||''}</span>
           </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderCelebrityMatches(){
+      document.querySelector('.sim-cards').innerHTML = CELEBRITY_MATCHES.map(m=>`
+        <div class="sim-card${m.isBest?' top':''}">
+          <div class="sim-card-photo">${m.isBest?'<span class="crown">👑</span>':''}<img src="${m.image}" alt="${m.name}" /></div>
+          <div class="sim-card-body"><span class="style">${m.styleLabel}</span><span class="name">${m.name}</span><div class="pct">${m.percent}%</div></div>
         </div>`).join('');
+    }
+
+    function goToStyleFromAnalysis(){
+      const best=CELEBRITY_MATCHES.find(m=>m.isBest)||CELEBRITY_MATCHES[0];
+      recommendedStyleId=best.id;
+      currentGender='female';
+      setGender('female');
+      goTab('style');
     }
 
     document.getElementById('fileInput').addEventListener('change', async e=>{
@@ -802,6 +842,7 @@
     }
 
     renderDensityGrid();
+    renderCelebrityMatches();
     renderStyles(); checkApi();
   </script>
 </body>

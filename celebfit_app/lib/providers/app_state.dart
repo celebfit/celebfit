@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier {
   bool _isCheckingServer = false;
   bool _isScanning = false;
   int _currentTab = 0;
+  String? _recommendedStyleId;
 
   Uint8List? get uploadedImageBytes => _uploadedImageBytes;
   String? get uploadedImagePath => _uploadedImagePath;
@@ -38,6 +39,7 @@ class AppState extends ChangeNotifier {
   bool get isCheckingServer => _isCheckingServer;
   bool get isScanning => _isScanning;
   int get currentTab => _currentTab;
+  String? get recommendedStyleId => _recommendedStyleId;
   bool get hasUploadedImage => _uploadedImageBytes != null;
   bool get hasResult => _resultAfterBytes != null;
   bool get settingsLoaded => _settingsLoaded;
@@ -86,6 +88,11 @@ class AppState extends ChangeNotifier {
 
   void setTab(int index) {
     _currentTab = index;
+    notifyListeners();
+  }
+
+  void setRecommendedStyleFromAnalysis() {
+    _recommendedStyleId = kRecommendedEyebrowStyle.id;
     notifyListeners();
   }
 

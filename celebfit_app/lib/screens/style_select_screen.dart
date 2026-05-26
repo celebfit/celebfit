@@ -21,6 +21,18 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
     return _gender == CelebGender.female ? kFemaleEyebrowStyles : kMaleEyebrowStyles;
   }
 
+  List<EyebrowStyle> _sortedStyles(AppState state) {
+    final styles = List<EyebrowStyle>.from(_visibleStyles);
+    final recommendedId = state.recommendedStyleId;
+    if (recommendedId == null) return styles;
+    styles.sort((a, b) {
+      if (a.id == recommendedId) return -1;
+      if (b.id == recommendedId) return 1;
+      return 0;
+    });
+    return styles;
+  }
+
   Future<void> _onApply(EyebrowStyle style) async {
     if (!style.apiEnabled) return;
 
@@ -38,7 +50,8 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final styles = _visibleStyles;
+    final styles = _sortedStyles(state);
+    final recommendedId = state.recommendedStyleId;
 
     return Column(
       children: [
@@ -65,29 +78,43 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
                             style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                           ),
                           const SizedBox(height: 14),
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 0.72,
+                          if (recommendedId != null && _gender == CelebGender.female) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                              ),
+                              child: Text(
+                                '분석 결과 · ${eyebrowStyleById(recommendedId)?.name ?? ''} 스타일 추천',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryDark,
+                                ),
+                              ),
                             ),
-                            itemCount: styles.length,
-                            itemBuilder: (context, index) {
-                              final style = styles[index];
-                              return StylePreviewCard(
-                                compact: true,
-                                name: style.name,
-                                subtitle: style.subtitle,
-                                previewAsset: style.previewAsset,
-                                enabled: style.apiEnabled,
-                                isLoading:
-                                    state.isApplying && state.selectedStyle?.id == style.id,
-                                onApply: () => _onApply(style),
-                              );
-                            },
+                          ],
+                          Column(
+                            children: [
+                              for (final style in styles) ...[
+                                StylePreviewCard(
+                                  name: style.name,
+                                  subtitle: style.subtitle,
+                                  description: style.description,
+                                  previewAsset: style.previewAsset,
+                                  enabled: style.apiEnabled,
+                                  isRecommended: style.id == recommendedId,
+                                  isLoading:
+                                      state.isApplying && state.selectedStyle?.id == style.id,
+                                  onApply: () => _onApply(style),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                            ],
                           ),
                         ],
                       ),

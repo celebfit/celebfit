@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     allow_fallback: bool = True
     enable_sd: bool = False
     use_github_pipeline: bool = True
+    # LoRA fallback download source (팀 repo 이전 시 GITHUB_REPO_SLUG 변경)
+    github_repo_slug: str = "jiucai233/ConditionalImageGeneration"
 
 
 @lru_cache

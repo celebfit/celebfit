@@ -16,95 +16,82 @@ main  ──push──▶  GitHub Action  ──merge──▶  app  ──▶  
 **규칙:** ML 코드는 **`main`에 push** → GitHub Action이 **`app`에 자동 반영**.  
 `app`에서 직접 ML 코드를 고치지 않습니다. (충돌·중복 방지)
 
-자동 sync 상세: [SYNC_BRANCHES.md](./SYNC_BRANCHES.md)
+자동 sync: [SYNC_BRANCHES.md](./SYNC_BRANCHES.md)
 
 ---
 
-## ML 팀 — 로컬에서 파이프라인 실행 (main)
+## app 브랜치
 
-```bash
-git checkout main
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+`app` = **main ML 코드** + **서비스 코드**. RunPod·브라우저 미리보기는 이 브랜치를 사용합니다.
 
-# BiSeNet 가중치 (최초 1회)
-cd masking_bisenet/face-parsing && ./download.sh && cd ../..
-
-python pipeline/main.py   # 결과 → pipeline/outputs/
-```
-
-**처리 순서:** 얼굴 마스크(BiSeNet) → 눈썹 영역 확대 → MediaPipe + LaMa로 기존 눈썹 지우기 → SD Inpaint + LoRA로 새 눈썹 생성 → 원본에 합성
-
-| 항목 | 경로 / 값 |
-|------|-----------|
-| LoRA | `lora_checkpoint/celeb_eyebrows_all_pro_v4/` |
-| Base model | `emilianJR/epiCRealism` (첫 실행 시 자동 다운로드) |
-
-코드 push 후 **Actions 탭**에서 `Sync main into app` 완료를 확인하세요.
+| 폴더 | 역할 |
+|------|------|
+| `celebfit_app/` | Flutter 앱 + HTML 미리보기 (`preview/index.html`) |
+| `api/` | FastAPI 백엔드 (`POST /api/v1/apply`) |
+| `deploy/` | RunPod / Docker 배포 |
+| `scripts/` | 미리보기 실행 등 |
 
 ---
 
-## 앱 팀 — 브라우저에서 UI 확인 (app)
+## 실행 방법
 
-Flutter 설치 없이 **HTML 미리보기**로 가장 빠르게 확인할 수 있습니다.
-
-### 1단계: 미리보기 실행
+### 브라우저 미리보기 (권장)
 
 ```bash
+git clone git@github.com:celebfit/celebfit.git
+cd celebfit
 git checkout app
 ./scripts/open_app_preview.sh
 ```
 
-브라우저: `http://127.0.0.1:8765/preview/index.html`
+→ `http://127.0.0.1:8765/preview/index.html`
 
-### 2단계: 앱 사용 순서
+**앱 사용:** 홈(사진) → 스타일(고윤정/신세경/홍수주 · 적용하기) → 결과(Before/After)
 
-1. **홈** — 사진 업로드  
-2. **분석** — UI만 (mock, API 없음)  
-3. **스타일** — 고윤정 / 신세경 / 홍수주 선택 → **적용하기**  
-4. **결과** — Before/After 슬라이더  
+### API 연결 (실제 AI 변환)
 
-### 3단계: API 연결 (실제 AI 변환)
+상단 배너 **연결됨**이어야 AI가 동작합니다. **미연결**이면 UI 데모만 됩니다.
 
-상단 배너가 **연결됨**이어야 AI 변환이 됩니다. **미연결**이면 UI 데모만 동작합니다.
-
-**RunPod GPU (팀 공용, 권장):**
+**RunPod (팀 공용):**
 
 ```bash
 ./scripts/open_app_preview.sh https://YOUR_POD_ID-8000.proxy.runpod.net
 ```
 
-Pod URL은 **MY 탭**에서 저장해도 됩니다.
+Pod URL은 미리보기 **MY 탭**에서 저장 가능. 배포: [RUNPOD.md](./RUNPOD.md)
 
-**로컬 API (Mac GPU/MPS 테스트):**
+**로컬 API (선택):**
 
 ```bash
-# 터미널 1 — API 서버
+# 터미널 1
 pip install -r api/requirements.txt
 export PYTHONPATH=$PWD
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-# 터미널 2 — 미리보기
+# 터미널 2
 ./scripts/open_app_preview.sh
 ```
 
-연결 확인: `curl http://127.0.0.1:8000/health`
+### RunPod 반영
+
+`main` push → Action이 `app` merge → Pod **Stop → Start** (또는 Pod에서 `git fetch origin app && git reset --hard origin/app`)
 
 ---
 
-## 자주 묻는 질문
+## 참고
+
+| 문서 | 내용 |
+|------|------|
+| [INTEGRATION.md](./INTEGRATION.md) | API ↔ 앱 연동 |
+| [RUNPOD.md](./RUNPOD.md) | GPU Pod 배포 |
+| [celebfit_app/README.md](./celebfit_app/README.md) | Flutter 앱 |
+
+**자주 묻는 질문**
 
 | 질문 | 답 |
 |------|-----|
-| main만 push하면 RunPod에 바로 반영되나? | Action이 app에 merge한 뒤, Pod **Stop → Start** (또는 `git pull origin app`) 필요 |
+| main만 push하면 RunPod에 바로 반영되나? | Action이 app에 merge한 뒤, Pod **Stop → Start** 필요 |
 | 브라우저에서 AI가 안 돼요 | 상단 배너 **미연결** → RunPod URL 또는 로컬 API 실행 |
-| app 브랜치를 직접 수정해도 되나? | Flutter/API/deploy 수정은 **app에 push**. ML 코드는 **main**에서 |
-| Flutter 앱은? | [celebfit_app/README.md](./celebfit_app/README.md) |
-| RunPod 배포는? | [RUNPOD.md](./RUNPOD.md) |
-| API 상세 연동은? | [INTEGRATION.md](./INTEGRATION.md) |
+| app 브랜치를 직접 수정해도 되나? | Flutter/API/deploy는 **app에 push**. ML 코드는 **main**에서 |
 
----
-
-## 저장소
-
-GitHub: [github.com/celebfit/celebfit](https://github.com/celebfit/celebfit)
+GitHub: [github.com/celebfit/celebfit](https://github.com/celebfit/celebfit) (branch: **app**)

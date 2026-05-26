@@ -2,7 +2,6 @@
 
 BiSeNet + MediaPipe 마스킹, LaMa 지우기, **SD Inpaint + LoRA**로 연예인 스타일(고윤정·신세경·홍수주) 눈썹을 생성합니다.
 
-> BrushNet은 사용하지 않습니다. 별도 체크포인트 다운로드 불필요.
 
 ## 브랜치
 

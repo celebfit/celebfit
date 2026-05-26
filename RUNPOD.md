@@ -1,22 +1,33 @@
-# RunPod GPU 배포용 celebfit API
+# RunPod GPU 배포 — celebfit API
 
-## 1. RunPod 가입
+팀 repo: [github.com/celebfit/celebfit](https://github.com/celebfit/celebfit) · branch **`app`**
 
-1. [runpod.io](https://www.runpod.io) 가입 + 결제 수단 등록
-2. **Pods** → **Deploy**
+---
 
-## 2. Pod 설정
+## 빠른 시작 (Docker Hub 없이, 추천)
 
-| 항목 | 권장 값 |
-|------|---------|
-| GPU | RTX 3090 / 4090 (VRAM **16GB+**) |
+### 1. RunPod Pod 생성
+
+1. [runpod.io](https://www.runpod.io) → **Pods** → **+ Deploy**
+2. GPU: **RTX 3090 / 4090** (24GB VRAM)
+3. Template: **RunPod PyTorch 2.2** (또는 CUDA 12.1 PyTorch)
+4. **Edit Template** / 설정:
+
+| 항목 | 값 |
+|------|-----|
 | Container Disk | **40 GB** |
-| Volume Disk | **50 GB** (Network Volume, 모델 캐시용) |
-| Volume Mount Path | `/data` |
-| Expose HTTP Ports | `8000` |
-| Container Image | 아래 방법 A 또는 B |
+| Volume Disk | **50 GB** (선택, 캐시용) |
+| Volume Mount | `/data` |
+| **Expose HTTP Ports** | `8000` |
+| **Start Command** | 아래 한 줄 전체 붙여넣기 |
 
-### 환경 변수
+**Start Command:**
+
+```bash
+bash -c 'curl -fsSL https://raw.githubusercontent.com/celebfit/celebfit/app/deploy/runpod_bootstrap.sh | bash'
+```
+
+5. **Environment Variables:**
 
 ```
 ENABLE_SD=true
@@ -27,84 +38,77 @@ HF_HOME=/data/huggingface
 TORCH_HOME=/data/torch
 ```
 
-## 3. 이미지 배포 방법
+6. **Deploy** → 상태 **Running** + Telemetry GPU 사용 확인
 
-### 방법 A — GitHub에서 Docker 빌드 (권장)
+### 2. URL 확인
 
-1. `app` 브랜치에 `Dockerfile`, `api/`, `deploy/` push
-2. RunPod → **Custom Container** → GitHub repo URL + branch `app`
-3. Dockerfile path: `Dockerfile`
-4. Build & Deploy
+Pod → **Connect** → Port **8000**:
 
-### 방법 B — Docker Hub
+```
+https://YOUR_POD_ID-8000.proxy.runpod.net
+```
 
-Mac/CI에서 빌드 후 push (로컬 디스크 부족 시 GitHub Actions 사용):
+### 3. 동작 확인 (Mac 터미널)
 
 ```bash
-docker build -t YOUR_USER/celebfit-api:latest .
-docker push YOUR_USER/celebfit-api:latest
+cd ~/Downloads/celebfit   # 또는 ConditionalImageGeneration
+chmod +x scripts/verify_runpod_api.sh
+./scripts/verify_runpod_api.sh https://YOUR_POD_ID-8000.proxy.runpod.net
 ```
 
-RunPod Container Image: `YOUR_USER/celebfit-api:latest`
-
-## 4. Pod URL 확인
-
-RunPod 대시보드 → Pod → **Connect** → HTTP Service **Port 8000**
-
-예:
-```
-https://xxxxxxxx-8000.proxy.runpod.net
-```
-
-### 동작 확인
+사진으로 실제 변환 테스트:
 
 ```bash
-curl https://xxxxxxxx-8000.proxy.runpod.net/health
-curl -X POST https://xxxxxxxx-8000.proxy.runpod.net/api/v1/warmup
+./scripts/verify_runpod_api.sh https://YOUR_POD_ID-8000.proxy.runpod.net ./test_face.jpg
 ```
 
-`message`에 `github sd_inpaint` 또는 `GitHub pipeline ready` 포함되면 성공.
+성공 기준:
+- `/health` → `"status": "ok"` 또는 warm-up 중 `"ready (models load on first apply)"`
+- `/api/v1/warmup` → `"engine": "github_sd_inpaint"` (또는 `"sd_inpaint"`)
+- `/api/v1/apply` → `"engine": "github_sd_inpaint"`, `after_image_bytes` > 10000
 
-Swagger: `https://xxxxxxxx-8000.proxy.runpod.net/docs`
+Swagger: `https://YOUR_POD_ID-8000.proxy.runpod.net/docs`
 
-## 5. iPhone / Flutter 앱 연결
+### 4. iPhone / Flutter 앱
 
-1. 앱 **마이** 탭 → API 서버 설정
-2. RunPod URL 입력 (끝 `/` 없이):
-   ```
-   https://xxxxxxxx-8000.proxy.runpod.net
-   ```
-3. **저장 · 연결 확인**
-4. 홈 → 사진 → 스타일(고윤정/신세경/홍수주) → 적용
+**마이** 탭 → API URL:
 
-또는 빌드 시 고정:
+```
+https://YOUR_POD_ID-8000.proxy.runpod.net
+```
+
+---
+
+## Docker 이미지 방식 (선택)
+
+`app` 브랜치 `Dockerfile`로 빌드 후 RunPod **Container Image**에 등록.
 
 ```bash
-cd celebfit_app
-flutter run --dart-define=API_BASE_URL=https://xxxxxxxx-8000.proxy.runpod.net
+docker build -t YOUR_DOCKERHUB/celebfit-api:latest .
+docker push YOUR_DOCKERHUB/celebfit-api:latest
 ```
 
-## 6. 비용 관리
+RunPod Container Image: `YOUR_DOCKERHUB/celebfit-api:latest`  
+Port: `8000` · Env: 위와 동일
 
-| 팁 | 설명 |
-|----|------|
-| **Pod Stop** | 데모 끝나면 반드시 중지 |
-| **Network Volume** | `/data`에 HF 캐시 → 재시작 시 재다운로드 생략 |
-| **WARMUP_ON_START=false** | 빠른 기동, 첫 `/apply`만 느림 |
+---
 
-예상: RTX 3090 ~$0.2–0.4/시간
+## 비용 · 주의
 
-## 7. 문제 해결
+| 항목 | 내용 |
+|------|------|
+| 첫 warm-up | epiCRealism ~4GB 다운로드 → **10~20분** |
+| 1회 `/apply` | GPU 기준 **8~15초** (warm-up 후) |
+| HTTP proxy | **100초** 타임아웃 — warm-up은 Pod 로그에서 확인 |
+| 비용 | ~$0.2–0.4/시간 · **테스트 후 Pod Stop** |
+
+---
+
+## 문제 해결
 
 | 증상 | 해결 |
 |------|------|
-| Warmup 10분+ | epiCRealism(~4GB) 첫 다운로드 — 정상 |
-| OOM | 더 큰 VRAM GPU 또는 동시 요청 1건 (기본 적용됨) |
-| 앱 연결 실패 | `https://` 사용, RunPod Pod Running 상태 확인 |
-| `fallback` 엔진 | `ENABLE_SD=true`, GPU Pod인지 확인 |
-
-## 8. GitHub Actions로 이미지 빌드 (Mac 디스크 없을 때)
-
-`.github/workflows/docker.yml` — push 시 Docker Hub 자동 빌드 (선택).
-
-Secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
+| Pod Exited | Logs 탭 — OOM이면 4090, disk 40GB+ |
+| `fallback` | `ENABLE_SD=true` 확인 |
+| warm-up 524 | proxy 100초 제한 — Pod **Logs**에서 "Warmup OK" 확인 후 `/apply` |
+| clone 실패 | repo Public 또는 RunPod에 GitHub access |

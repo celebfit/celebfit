@@ -10,7 +10,8 @@ opencv-python>=4.10.0,<4.12.0
 scipy>=1.14.0
 requests>=2.32.0
 certifi>=2024.0.0
-mediapipe>=0.10.14
+# Pin: mediapipe>=0.10.18 uses new C bindings that fail on some RunPod images
+mediapipe==0.10.14
 onnxruntime-gpu>=1.19.0
 diffusers>=0.31.0,<0.35.0
 transformers>=4.46.0,<5.0.0

@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+.env
+.DS_Store
+weights/
+tests/
+*.ipynb
+brushnet/
+data/raw_face_data/
+masking_bisenet/face-parsing/weights/*.onnx
+pipeline/outputs/

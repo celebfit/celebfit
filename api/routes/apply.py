@@ -27,7 +27,11 @@ async def warmup_models():
 
     return {
         "status": "ok" if pipeline.ready else "error",
-        "engine": "fallback" if pipeline.using_fallback else "sd_inpaint",
+        "engine": (
+            "fallback"
+            if pipeline.using_fallback
+            else ("github_sd_inpaint" if pipeline.github_pipeline else "sd_inpaint")
+        ),
         "message": pipeline.status_message,
         "device": pipeline.device,
     }

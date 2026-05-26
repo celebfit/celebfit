@@ -2,11 +2,15 @@ name: Build and push celebfit API image
 
 on:
   push:
-    branches: [app, main]
+    branches: [app]
     paths:
       - 'Dockerfile'
       - 'api/**'
       - 'deploy/**'
+      - 'pipeline/**'
+      - 'masking_bisenet/**'
+      - 'util/**'
+      - 'lora_checkpoint/**'
   workflow_dispatch:
 
 jobs:

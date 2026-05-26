@@ -5,6 +5,7 @@ from api.ssl_fix import configure_ssl
 configure_ssl()
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

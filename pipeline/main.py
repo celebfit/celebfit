@@ -61,8 +61,19 @@ RIGHT_BROW = [300, 293, 334, 296, 336, 285, 295, 282, 283, 276]
 LEFT_EYE   = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
 RIGHT_EYE  = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
 
+
+def _to_mediapipe_srgb(image_np: np.ndarray) -> np.ndarray:
+    """MediaPipe Image() requires contiguous uint8 RGB (OpenCV paths pass BGR)."""
+    if image_np.dtype != np.uint8:
+        image_np = np.clip(image_np, 0, 255).astype(np.uint8)
+    if image_np.ndim == 3 and image_np.shape[2] == 3:
+        image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+    return np.ascontiguousarray(image_np)
+
+
 def get_landmarks_new(image_np):
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_np)
+    rgb = _to_mediapipe_srgb(image_np)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = _get_detector().detect(mp_image)
     if not result.face_landmarks:
         return None

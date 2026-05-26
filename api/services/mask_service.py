@@ -50,10 +50,13 @@ class FaceMaskService:
         return image, np.asarray(image)
 
     def _detect_landmarks(self, image_rgb: np.ndarray):
+        if image_rgb.dtype != np.uint8:
+            image_rgb = np.clip(image_rgb, 0, 255).astype(np.uint8)
+        rgb = np.ascontiguousarray(image_rgb)
         result = self._detector.detect(
             mp.Image(
                 image_format=mp.ImageFormat.SRGB,
-                data=np.ascontiguousarray(image_rgb),
+                data=rgb,
             )
         )
         if not result.face_landmarks:

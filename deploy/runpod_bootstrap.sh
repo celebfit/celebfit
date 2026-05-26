@@ -17,14 +17,25 @@ export ALLOW_FALLBACK="${ALLOW_FALLBACK:-false}"
 export WARMUP_ON_START="${WARMUP_ON_START:-true}"
 export API_PORT="${API_PORT:-8000}"
 
-mkdir -p "$HF_HOME" "$TORCH_HOME" "$REPO_DIR/weights"
+mkdir -p "$HF_HOME" "$TORCH_HOME"
 
-if [[ ! -d "$REPO_DIR/.git" ]]; then
+if [[ -d "$REPO_DIR/.git" ]]; then
+  echo "Updating existing repo at $REPO_DIR..."
+  git -C "$REPO_DIR" fetch --depth 1 origin "$BRANCH"
+  git -C "$REPO_DIR" checkout "$BRANCH"
+  git -C "$REPO_DIR" reset --hard "origin/$BRANCH"
+elif [[ -e "$REPO_DIR" ]]; then
+  echo "Removing incomplete repo at $REPO_DIR..."
+  rm -rf "$REPO_DIR"
+  echo "Cloning $REPO_URL (branch $BRANCH)..."
+  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
+else
   echo "Cloning $REPO_URL (branch $BRANCH)..."
   git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
 fi
 
 cd "$REPO_DIR"
+mkdir -p "$REPO_DIR/weights"
 
 if [[ ! -f masking_bisenet/face-parsing/weights/resnet18.onnx ]]; then
   echo "Downloading BiSeNet ONNX..."

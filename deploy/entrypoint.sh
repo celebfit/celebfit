@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /app
+APP_ROOT="${APP_ROOT:-${MODEL_REPO_ROOT:-/app}}"
+cd "$APP_ROOT"
 
-export PYTHONPATH=/app
-export MODEL_REPO_ROOT="${MODEL_REPO_ROOT:-/app/model_repo}"
+export PYTHONPATH="$APP_ROOT"
+export MODEL_REPO_ROOT="${MODEL_REPO_ROOT:-$APP_ROOT}"
 export HF_HOME="${HF_HOME:-/data/huggingface}"
 export TORCH_HOME="${TORCH_HOME:-/data/torch}"
 export ENABLE_SD="${ENABLE_SD:-true}"
 export USE_GITHUB_PIPELINE="${USE_GITHUB_PIPELINE:-true}"
 export ALLOW_FALLBACK="${ALLOW_FALLBACK:-false}"
 
-mkdir -p "$HF_HOME" "$TORCH_HOME" /app/weights
+mkdir -p "$HF_HOME" "$TORCH_HOME" "$APP_ROOT/weights"
 
 if [[ "${WARMUP_ON_START:-true}" == "true" ]]; then
   echo "Warming up SD pipeline (first boot may take 10-20 min)..."

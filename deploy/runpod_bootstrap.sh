@@ -6,6 +6,7 @@ REPO_DIR="${REPO_DIR:-/workspace/celebfit}"
 BRANCH="${BRANCH:-app}"
 REPO_URL="${REPO_URL:-https://github.com/celebfit/celebfit.git}"
 
+export APP_ROOT="$REPO_DIR"
 export PYTHONPATH="$REPO_DIR"
 export MODEL_REPO_ROOT="$REPO_DIR"
 export HF_HOME="${HF_HOME:-/data/huggingface}"

@@ -1,7 +1,5 @@
 # celebfit
 
-## 팀원 안내
-
 ```
 main  ──push──▶  GitHub Action  ──merge──▶  app  ──▶  RunPod / 브라우저 미리보기
  │                                              │

@@ -19,6 +19,13 @@ export API_PORT="${API_PORT:-8000}"
 
 mkdir -p "$HF_HOME" "$TORCH_HOME"
 
+if command -v apt-get >/dev/null 2>&1; then
+  echo "Installing system libraries for MediaPipe / OpenCV..."
+  apt-get update -qq
+  apt-get install -y -qq --no-install-recommends \
+    libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 libgl1 >/dev/null
+fi
+
 if [[ -d "$REPO_DIR/.git" ]]; then
   echo "Updating existing repo at $REPO_DIR..."
   git -C "$REPO_DIR" fetch --depth 1 origin "$BRANCH"
@@ -46,5 +53,6 @@ fi
 
 echo "Installing Python dependencies..."
 pip install -q --no-cache-dir -r api/requirements-docker.txt
+pip install -q --no-cache-dir --force-reinstall "mediapipe==0.10.14"
 
 exec bash deploy/entrypoint.sh

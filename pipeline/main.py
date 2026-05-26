@@ -39,12 +39,22 @@ if not os.path.exists(model_path):
     )
     print("✅ face_landmarker.task download complete.")
 
-# Initialize MediaPipe detector once
-options = vision.FaceLandmarkerOptions(
-    base_options=python.BaseOptions(model_asset_path=model_path),
-    num_faces=1
-)
-detector = vision.FaceLandmarker.create_from_options(options)
+# Initialize MediaPipe detector lazily (CPU — headless RunPod)
+_detector = None
+
+
+def _get_detector():
+    global _detector
+    if _detector is None:
+        options = vision.FaceLandmarkerOptions(
+            base_options=python.BaseOptions(
+                model_asset_path=model_path,
+                delegate=python.BaseOptions.Delegate.CPU,
+            ),
+            num_faces=1,
+        )
+        _detector = vision.FaceLandmarker.create_from_options(options)
+    return _detector
 
 LEFT_BROW  = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46]
 RIGHT_BROW = [300, 293, 334, 296, 336, 285, 295, 282, 283, 276]
@@ -53,7 +63,7 @@ RIGHT_EYE  = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 3
 
 def get_landmarks_new(image_np):
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_np)
-    result = detector.detect(mp_image)
+    result = _get_detector().detect(mp_image)
     if not result.face_landmarks:
         return None
     return result.face_landmarks[0]

@@ -11,48 +11,101 @@ root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_path)
 sys.path.insert(0, os.path.join(root_path, "brushnet/src"))
 
-from util.smooth_mask import smooth_mask
-from util.dilate_mask import dilate_mask
-from util.crop_face import get_crop_info, apply_crop, restore_crop, get_actor_face_crop_info
-from util.color_transfer import color_transfer
 from masking_bisenet.generate_mask_bisenet import generate_bisenet_face_parts_mask
-from diffusers import StableDiffusionControlNetInpaintPipeline, ControlNetModel, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
-from transformers import CLIPTextModel, CLIPTokenizer
+from util.dilate_mask import dilate_mask
+from util.smooth_mask import smooth_mask
+from util.crop_face import get_zoom_crop_info, apply_crop, restore_crop
+from diffusers import StableDiffusionInpaintPipeline, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
+from transformers import CLIPTextModel
+from simple_lama_inpainting import SimpleLama
 from peft import PeftModel
+import transformers
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
-#======= Configuration
-# Base realistic checkpoint (automatically cached from HuggingFace)
-base_model_path = "emilianJR/epiCRealism" 
+if not hasattr(transformers, 'CLIPFeatureExtractor'):
+    transformers.CLIPFeatureExtractor = transformers.CLIPImageProcessor
 
-# Choose target celebrity: '고윤정' (Go Youn Jung), '신세경' (Shin Se Kyung), or '홍수주' (Hong Su Zu)
-TARGET_CELEB = "고윤정"
+#======= MediaPipe Model Download & Setup
+model_path = os.path.join(root_path, "data", "face_landmarker.task")
+if not os.path.exists(model_path):
+    print("Downloading face_landmarker.task...")
+    import urllib.request
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    urllib.request.urlretrieve(
+        'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        model_path
+    )
+    print("✅ face_landmarker.task download complete.")
 
-# Inputs
-image_path = os.path.join(root_path, "data/bro.jpg")
-input_name = os.path.splitext(os.path.basename(image_path))[0]
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-output_path = os.path.join(root_path, f"pipeline/outputs/result_{input_name}_{TARGET_CELEB}_{timestamp}.png")
+# Initialize MediaPipe detector once
+options = vision.FaceLandmarkerOptions(
+    base_options=python.BaseOptions(model_asset_path=model_path),
+    num_faces=1
+)
+detector = vision.FaceLandmarker.create_from_options(options)
 
-# Inpainting Hyperparameters
-STABLE_STRENGTH = 0.60
-STABLE_LORA_SCALE = 1.15
-STABLE_CN_SCALE = 0.75
-controlnet_id = "lllyasviel/sd-controlnet-canny"
+LEFT_BROW  = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46]
+RIGHT_BROW = [300, 293, 334, 296, 336, 285, 295, 282, 283, 276]
+LEFT_EYE   = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+RIGHT_EYE  = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
 
-# Prompt construction
-prompt = f"a photo of {TARGET_CELEB} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
-negative_prompt = "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, purple patches, colorful noise, hard edges, dirty skin"
+def get_landmarks_new(image_np):
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_np)
+    result = detector.detect(mp_image)
+    if not result.face_landmarks:
+        return None
+    return result.face_landmarks[0]
 
-#======= Device Setup (Mac MPS / CUDA / CPU)
-if torch.cuda.is_available():
-    device = "cuda"
-    dtype = torch.float16
-elif torch.backends.mps.is_available():
-    device = "mps"
-    dtype = torch.float32
-else:
-    device = "cpu"
-    dtype = torch.float32
+def make_brow_mask_from_landmarks(image_np, padding_ratio=0.5):
+    h, w = image_np.shape[:2]
+    lm = get_landmarks_new(image_np)
+    if lm is None:
+        return np.zeros((h, w), dtype=np.uint8)
+
+    brow_mask = np.zeros((h, w), dtype=np.uint8)
+    eye_mask  = np.zeros((h, w), dtype=np.uint8)
+
+    # Eyebrows mask
+    for brow_idx in [LEFT_BROW, RIGHT_BROW]:
+        pts = np.array([[int(lm[i].x * w), int(lm[i].y * h)] for i in brow_idx])
+        x_min, y_min = pts.min(axis=0)
+        x_max, y_max = pts.max(axis=0)
+        brow_w = x_max - x_min
+        brow_h = y_max - y_min
+
+        pad_x = int(brow_w * padding_ratio)
+        pad_y = int(brow_h * padding_ratio * 2)
+
+        x_min = max(0, x_min - pad_x)
+        x_max = min(w, x_max + pad_x)
+        y_min = max(0, y_min - pad_y)
+        y_max = min(h, y_max + pad_y)
+
+        hull = cv2.convexHull(pts)
+        cv2.fillConvexPoly(brow_mask, hull, 255)
+        brow_mask[y_min:y_max, x_min:x_max] = cv2.bitwise_or(
+            brow_mask[y_min:y_max, x_min:x_max],
+            np.full((y_max-y_min, x_max-x_min), 255, dtype=np.uint8)
+        )
+
+    # Eyes mask (exclusion area)
+    for eye_idx in [LEFT_EYE, RIGHT_EYE]:
+        pts = np.array([[int(lm[i].x * w), int(lm[i].y * h)] for i in eye_idx])
+        hull = cv2.convexHull(pts)
+        cv2.fillConvexPoly(eye_mask, hull, 255)
+    
+    # Dilate eye mask
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
+    eye_mask = cv2.dilate(eye_mask, k)
+
+    # Remove eyes from eyebrow mask
+    final_mask = cv2.bitwise_and(brow_mask, cv2.bitwise_not(eye_mask))
+    final_mask = cv2.GaussianBlur(final_mask, (11, 11), 0)
+    _, final_mask = cv2.threshold(final_mask, 127, 255, cv2.THRESH_BINARY)
+
+    return final_mask
 
 def get_canny_guide(image_np):
     img = cv2.Canny(image_np, 100, 200)
@@ -60,135 +113,193 @@ def get_canny_guide(image_np):
     img = np.concatenate([img, img, img], axis=2)
     return Image.fromarray(img)
 
+def color_transfer(src, ref, mask):
+    bg_mask = (mask == 0)
+    if not np.any(bg_mask): return src
+    src_lab = cv2.cvtColor(src, cv2.COLOR_BGR2LAB).astype(np.float32)
+    ref_lab = cv2.cvtColor(ref, cv2.COLOR_BGR2LAB).astype(np.float32)
+    for i in range(3):
+        src_channel = src_lab[:, :, i]
+        ref_channel = ref_lab[:, :, i]
+        mean_src, std_src = src_channel[bg_mask].mean(), src_channel[bg_mask].std()
+        mean_ref, std_ref = ref_channel[bg_mask].mean(), ref_channel[bg_mask].std()
+        if std_src > 1e-5:
+            src_lab[:, :, i] = (src_channel - mean_src) * (std_ref / std_src) + mean_ref
+        else:
+            src_lab[:, :, i] = src_channel - mean_src + mean_ref
+    return cv2.cvtColor(np.clip(src_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
-
-def run_pipeline():
-    #======= 1. Load Models & Pipelines
-    print(f"Loading base model {base_model_path} and Canny ControlNet on {device}...")
+def load_models():
+    base_model_path = "emilianJR/epiCRealism" 
+    v4_lora_path = os.path.join(root_path, "lora_checkpoint/celeb_eyebrows_all_pro_v4")
+    
+    if torch.cuda.is_available():
+        device = "cuda"
+        dtype = torch.float16
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        dtype = torch.float32
+    else:
+        device = "cpu"
+        dtype = torch.float32
+        
+    print(f"Loading base pipeline and loading V4 LoRA checkpoint on {device}...")
     
     text_encoder = CLIPTextModel.from_pretrained(base_model_path, subfolder="text_encoder", torch_dtype=dtype)
     vae = AutoencoderKL.from_pretrained(base_model_path, subfolder="vae", torch_dtype=dtype)
     unet = UNet2DConditionModel.from_pretrained(base_model_path, subfolder="unet", torch_dtype=dtype)
-    controlnet = ControlNetModel.from_pretrained(controlnet_id, torch_dtype=dtype)
     
-    pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
-        base_model_path, controlnet=controlnet, text_encoder=text_encoder, vae=vae, unet=unet,
+    pipe = StableDiffusionInpaintPipeline.from_pretrained(
+        base_model_path, text_encoder=text_encoder, vae=vae, unet=unet,
         torch_dtype=dtype, low_cpu_mem_usage=True, safety_checker=None
     )
-    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
-    pipe.to(device)
-
-    #======= 2. Load Unified/Individual LoRA
-    # Check for the unified LoRA model first (V4), fallback to V2 or individual if not trained yet
-    unified_lora_path = os.path.join(root_path, "lora_checkpoint/celeb_eyebrows_all_pro_v4")
-    unified_lora_v2_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
-    individual_lora_path = os.path.join(root_path, f"data/ckpt/{TARGET_CELEB}_eyebrows_pro_v2")
     
-    selected_lora_path = None
-    if os.path.exists(os.path.join(unified_lora_path, "unet")):
-        selected_lora_path = unified_lora_path
-        print(f"✅ Selected Unified V4 LoRA checkpoint.")
-    elif os.path.exists(os.path.join(unified_lora_v2_path, "unet")):
-        selected_lora_path = unified_lora_v2_path
-        print(f"✅ Selected Unified V2 LoRA checkpoint (fallback).")
-    elif os.path.exists(os.path.join(individual_lora_path, "unet")):
-        selected_lora_path = individual_lora_path
-        print(f"✅ Selected Individual {TARGET_CELEB} LoRA checkpoint (fallback).")
-        
-    if selected_lora_path is not None:
-        pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(selected_lora_path, "unet"), adapter_name="celebs")
-        pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(selected_lora_path, "text_encoder"), adapter_name="celebs")
-        pipe.set_adapters(["celebs"], adapter_weights=[STABLE_LORA_SCALE])
-        print(f"✅ Loaded LoRA Adapter from {selected_lora_path} with scale {STABLE_LORA_SCALE}")
+    pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(v4_lora_path, "unet"), adapter_name="unified_v4")
+    pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(v4_lora_path, "text_encoder"), adapter_name="unified_v4")
+    pipe.set_adapters(["unified_v4"], adapter_weights=[1.15])
+    print(f"✅ Loaded LoRA V4 checkpoint.")
+    
+    pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+    if device != "cuda":
+        pipe.to(device)
+        pipe.enable_attention_slicing()
+        pipe.enable_vae_slicing()
     else:
-        print("⚠️ Warning: No pre-trained LoRA adapter found. Proceeding without LoRA.")
+        pipe.enable_model_cpu_offload()
+        
+    print("Loading LaMa inpainting model...")
+    lama = SimpleLama()
+    return pipe, lama, device
 
-    #======= 3. Prepare Image & Generate Mask
-    print(f"Generating eyebrows mask for: {TARGET_CELEB}")
+def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
+    print(f"\nProcessing {image_path} for celebrity style: {TARGET_CELEB}")
     original_bgr = cv2.imread(image_path)
     if original_bgr is None:
-        print(f"Error: Could not find input image at {image_path}")
+        print(f"Failed to read image: {image_path}")
         return
-
-    # Generate eyebrow mask using BiSeNet (dilated and smoothed for clean blending boundaries)
-    raw_mask = generate_bisenet_face_parts_mask(original_bgr, parts=["eyebrows"])
-    raw_mask_base = dilate_mask(raw_mask, pixels=15)
-    processed_mask = smooth_mask(raw_mask_base)
-
-    # Crop target face area locally for stable generation scale (resolves scale mismatch)
+        
     h, w = original_bgr.shape[:2]
-    crop_info = get_actor_face_crop_info(processed_mask, original_bgr.shape, padding_ratio=4.0)
     
-    # 512x512 Local Crops
+    # 1. Mask Generation on original face
+    raw_mask_base = generate_bisenet_face_parts_mask(original_bgr, parts=["eyebrows"])
+    raw_mask_base = dilate_mask(raw_mask_base, pixels=15)
+    raw_mask_base = smooth_mask(raw_mask_base)
+    
+    # 2. Crop to 512x512 (Using closer zoom crop for higher detail resolution)
+    crop_info = get_zoom_crop_info(raw_mask_base, original_bgr.shape, padding_ratio=1.3, min_size=512)
     image_512 = apply_crop(original_bgr, crop_info, target_size=512)
-    mask_512_binary = apply_crop(processed_mask, crop_info, target_size=512)
+    mask_512_binary = apply_crop(raw_mask_base, crop_info, target_size=512)
     
-    # Telea Fill to completely erase eyebrows from the input image to avoid concealer patches
-    textured_fill = cv2.inpaint(image_512, mask_512_binary, 3, cv2.INPAINT_TELEA)
-    mask_3ch_smooth = np.repeat(smooth_mask(mask_512_binary)[:, :, np.newaxis], 3, axis=2).astype(np.float32) / 255.0
-    masked_image_512 = (image_512 * (1.0 - mask_3ch_smooth) + textured_fill * mask_3ch_smooth).astype(np.uint8)
+    # 3. LaMa Eraser (Erase Eyebrows using MediaPipe landmarks adaptive mask)
+    mask_512_adaptive = make_brow_mask_from_landmarks(image_512, padding_ratio=0.5)
+    if np.sum(mask_512_adaptive) == 0:
+        mask_512_adaptive = mask_512_binary
+        
+    image_pil = Image.fromarray(cv2.cvtColor(image_512, cv2.COLOR_BGR2RGB))
+    mask_pil = Image.fromarray(mask_512_adaptive).convert('L')
     
-    # Preprocess Image & Mask for Pipeline
+    # Erase eyebrows (three passes)
+    no_brow_pil = lama(image_pil, mask_pil)
+    no_brow_pil = lama(no_brow_pil, mask_pil)
+    no_brow_pil = lama(no_brow_pil, mask_pil)
+    masked_image_512 = cv2.cvtColor(np.array(no_brow_pil), cv2.COLOR_RGB2BGR)
+    
     image_pil = Image.fromarray(cv2.cvtColor(masked_image_512, cv2.COLOR_BGR2RGB))
     pipe_mask_pil = Image.new("RGB", (512, 512), "white")
+    control_image_pil = get_canny_guide(image_512)
     
-    # Canny edge guide from the masked crop (allows correct style/angle shape generation)
-    control_image_pil = get_canny_guide(masked_image_512)
-
-    #======= 4. Inference
-    print(f"Generating eyebrows via StableDiffusionControlNetInpaintPipeline (Strength: {STABLE_STRENGTH})...")
+    # 4. Generate
+    UNIFIED_PROMPT_TEMPLATE = "a photo of {celeb} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
+    UNIFIED_NEGATIVE_PROMPT = "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, blurry, plastic, purple patches, colorful noise, burnt, high contrast, hard edges, dirty skin"
+    
+    current_prompt = UNIFIED_PROMPT_TEMPLATE.format(celeb=TARGET_CELEB)
     generator = torch.Generator(device).manual_seed(42)
     
-    # Enable LoRA scaling safely
-    pipe.unet.set_adapter("celebs")
-    pipe.text_encoder.set_adapter("celebs")
-
-    output_512_pil = pipe(
-        prompt=prompt,
-        negative_prompt=negative_prompt,
-        image=image_pil,
-        mask_image=pipe_mask_pil,
-        control_image=control_image_pil,
-        controlnet_conditioning_scale=STABLE_CN_SCALE,
-        strength=STABLE_STRENGTH,
-        num_inference_steps=40,
-        guidance_scale=6.0,
-        generator=generator
+    output_pil = pipe(
+        prompt=current_prompt, negative_prompt=UNIFIED_NEGATIVE_PROMPT,
+        image=image_pil, mask_image=pipe_mask_pil, control_image=control_image_pil,
+        controlnet_conditioning_scale=0, num_inference_steps=40,
+        guidance_scale=6.0, strength=0.60, generator=generator
     ).images[0]
-
-    #======= 5. Integrate & Restore Back to Full Image
-    output_512_bgr = cv2.cvtColor(np.array(output_512_pil), cv2.COLOR_RGB2BGR)
     
-    # Color transfer to match the tone of the generated patch with the original face
-    corrected_bgr_512 = color_transfer(output_512_bgr, image_512, mask_512_binary)
+    # Post-processing
+    result_np_512 = np.array(output_pil)
+    result_bgr_512 = cv2.cvtColor(result_np_512, cv2.COLOR_RGB2BGR)
     
-    # Restore the local 512 patch back to original resolution
+    # Apply color transfer correction to SD output (matching to erased crop)
+    corrected_bgr_512 = color_transfer(result_bgr_512, masked_image_512, mask_512_binary)
+    
+    # Restore and blend
     restored_full = restore_crop(corrected_bgr_512, crop_info, original_bgr.shape)
 
-    # Soft alpha-blending using the original processed mask directly to prevent alignment issues
-    mask_np = processed_mask.astype(np.float32) / 255.0
-    if len(mask_np.shape) == 2:
-        mask_np = mask_np[:, :, np.newaxis]
+    # Create full-size erased image to avoid double-eyebrow/concealer patches underneath
+    restored_erased_full = restore_crop(masked_image_512, crop_info, original_bgr.shape)
+    orig_mask_np = raw_mask_base.astype(np.float32) / 255.0
+    if len(orig_mask_np.shape) == 2:
+        orig_mask_np = orig_mask_np[:, :, np.newaxis]
     
-    # Dynamic kernel size based on 1.5% of max image dimension (must be odd)
     ksize = int(max(original_bgr.shape[:2]) * 0.015) | 1
-    mask_blurred = cv2.GaussianBlur(mask_np, (ksize, ksize), 0)
+    orig_mask_blurred = cv2.GaussianBlur(orig_mask_np, (ksize, ksize), 0)
+    if len(orig_mask_blurred.shape) == 2:
+        orig_mask_blurred = orig_mask_blurred[:, :, np.newaxis]
+    original_erased_bgr = (restored_erased_full * orig_mask_blurred + original_bgr * (1.0 - orig_mask_blurred)).astype(np.uint8)
+
+    # Detect generated eyebrows dynamically on the output crop image
+    new_raw_mask = generate_bisenet_face_parts_mask(corrected_bgr_512, parts=["eyebrows"])
+    if np.sum(new_raw_mask) == 0:
+        new_processed_mask = mask_512_binary
+    else:
+        new_raw_mask_base = dilate_mask(new_raw_mask, pixels=15)
+        new_processed_mask = smooth_mask(new_raw_mask_base)
+
+    # Restore the new crop mask back to original resolution (2D shape)
+    new_restored_mask = restore_crop(new_processed_mask, crop_info, original_bgr.shape[:2])
+
+    # Soft alpha-blending using the new mask directly to prevent alignment issues
+    new_mask_np = new_restored_mask.astype(np.float32) / 255.0
+    if len(new_mask_np.shape) == 2:
+        new_mask_np = new_mask_np[:, :, np.newaxis]
     
-    if len(mask_blurred.shape) == 2:
-        mask_blurred = mask_blurred[:, :, np.newaxis]
+    new_mask_blurred = cv2.GaussianBlur(new_mask_np, (ksize, ksize), 0)
+    if len(new_mask_blurred.shape) == 2:
+        new_mask_blurred = new_mask_blurred[:, :, np.newaxis]
 
-    final_np = (restored_full * mask_blurred + original_bgr * (1.0 - mask_blurred)).astype(np.uint8)
-
-    #======= 6. Create Preview & Save
-    scale = 0.5
-    new_size = (int(w * scale), int(h * scale))
-    preview_orig = cv2.resize(original_bgr, new_size)
-    preview_mask = cv2.resize(cv2.cvtColor(processed_mask, cv2.COLOR_GRAY2BGR), new_size)
-    preview_res = cv2.resize(final_np, new_size)
-
-    comparison = np.hstack((preview_orig, preview_mask, preview_res))
-    cv2.imwrite(output_path, comparison)
-    print(f"🎉 Success! Result saved to {output_path}")
+    # Blend restored full generated image with the erased full-size background
+    final_result_bgr = (restored_full * new_mask_blurred + original_erased_bgr * (1.0 - new_mask_blurred)).astype(np.uint8)
+    
+    # 5. Save Outputs
+    output_dir = os.path.join(root_path, "pipeline/outputs")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    input_name = os.path.splitext(os.path.basename(image_path))[0]
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Save the clean final result at original resolution
+    clean_result_path = os.path.join(output_dir, f"result_{input_name}_{TARGET_CELEB}_{timestamp}.png")
+    cv2.imwrite(clean_result_path, final_result_bgr)
+    print(f"Saved clean result to: {clean_result_path}")
 
 if __name__ == "__main__":
-    run_pipeline()
+    inputs = [
+        "actor.jpeg",
+        "raw_face_data/seed1000020.png",
+        "raw_face_data/seed1000022.png",
+        "raw_face_data/seed1000095.png",
+        "raw_face_data/seed1000163.png",
+        "raw_face_data/seed1000166.png",
+        "raw_face_data/seed1000187.png"
+    ]
+    celebs = ["고윤정", "신세경", "홍수주"]
+    
+    print("Starting batch inference for main pipeline...")
+    pipe, lama, device = load_models()
+    
+    for img_name in inputs:
+        img_path = os.path.join(root_path, "data", img_name)
+        if not os.path.exists(img_path):
+            print(f"Warning: Input image not found: {img_path}")
+            continue
+        for celeb in celebs:
+            run_pipeline(img_path, celeb, pipe, lama, device)
+            
+    print("\nBatch inference complete! Results are in pipeline/outputs/")

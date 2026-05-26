@@ -30,10 +30,11 @@ def get_crop_info(mask, image_shape, target_size=512):
 
     return (int(x1), int(y1), int(cw), int(ch))
 
-def get_zoom_crop_info(mask, image_shape, padding_ratio=2.5):
+def get_zoom_crop_info(mask, image_shape, padding_ratio=2.5, min_size=0):
     """
     【特写模式】根据眉毛大小自动缩放裁剪区域。
     padding_ratio: 裁剪区域相对于眉毛包围盒的倍数。
+    min_size: 最小裁剪框尺寸，用于保留特写细节并防止过小裁剪。
     """
     h, w = image_shape[:2]
     y_indices, x_indices = np.where(mask > 0)
@@ -47,8 +48,9 @@ def get_zoom_crop_info(mask, image_shape, padding_ratio=2.5):
     bw = max_x - min_x
     bh = max_y - min_y
     
-    # 2. 以长边为基准扩展为正方形
-    side = max(bw, bh) * padding_ratio
+    # 2. 以长边为基准扩展为正方形，并结合 min_size
+    side = max(max(bw, bh) * padding_ratio, min_size)
+    side = min(side, w, h)
     
     # 3. 确定中心并计算左上角
     cx, cy = (min_x + max_x) // 2, (min_y + max_y) // 2
@@ -62,11 +64,9 @@ def get_zoom_crop_info(mask, image_shape, padding_ratio=2.5):
     # 如果超出右边界
     if x1 + side > w:
         x1 = max(0, int(w - side))
-        side = min(side, w)
     # 如果超出下边界
     if y1 + side > h:
         y1 = max(0, int(h - side))
-        side = min(side, h)
         
     return (x1, y1, int(side), int(side))
 
@@ -88,6 +88,7 @@ def get_actor_face_crop_info(mask, image_shape, padding_ratio=4.0, vertical_offs
     
     # 太阳穴两侧的宽度通常是眉毛宽度的 4.0 倍左右（对应于包含完整眼眉和眼部区域的方形）
     side = int(bw * padding_ratio)
+    side = min(side, w, h)
     
     # 中心点：水平居中，垂直方向向下偏移（以覆盖“双眼下方”并保持“额头中线”在上方）
     cx = (min_x + max_x) // 2
@@ -104,10 +105,8 @@ def get_actor_face_crop_info(mask, image_shape, padding_ratio=4.0, vertical_offs
     
     if x1 + side > w:
         x1 = max(0, int(w - side))
-        side = min(side, w)
     if y1 + side > h:
         y1 = max(0, int(h - side))
-        side = min(side, h)
         
     return (x1, y1, int(side), int(side))
 
@@ -128,6 +127,7 @@ def get_random_actor_face_crop_info(mask, image_shape, min_padding=3.6, max_padd
     
     padding_ratio = np.random.uniform(min_padding, max_padding)
     side = int(bw * padding_ratio)
+    side = min(side, w, h)
     
     cx = (min_x + max_x) // 2
     cy = (min_y + max_y) // 2
@@ -152,10 +152,8 @@ def get_random_actor_face_crop_info(mask, image_shape, min_padding=3.6, max_padd
     
     if x1 + side > w:
         x1 = max(0, int(w - side))
-        side = min(side, w)
     if y1 + side > h:
         y1 = max(0, int(h - side))
-        side = min(side, h)
         
     return (x1, y1, int(side), int(side))
 

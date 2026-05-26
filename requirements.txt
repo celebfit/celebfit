@@ -1,10 +1,14 @@
-torch
+torch>=2.0
 torchvision
-transformers
-diffusers
+transformers>=4.30
+diffusers>=0.25
 accelerate
 opencv-python
 Pillow
 numpy
 onnxruntime
 huggingface_hub
+peft>=0.6
+safetensors
+mediapipe>=0.10
+simple-lama-inpainting

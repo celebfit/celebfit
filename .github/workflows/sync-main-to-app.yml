@@ -1,0 +1,73 @@
+# main 브랜치 push 시 app 브랜치에 자동 merge 후 push (main은 수정하지 않음)
+
+name: Sync main into app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge main into app
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main app
+          git checkout app
+          git reset --hard origin/app
+
+          if git merge origin/main --no-edit; then
+            echo "status=merged" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            git merge --abort
+          fi
+
+      - name: Push to app
+        if: steps.merge.outputs.status == 'merged'
+        run: |
+          git push origin app
+          echo "main → app sync complete"
+
+      - name: Prepare conflict resolution branch
+        if: steps.merge.outputs.status == 'conflict'
+        run: |
+          git checkout -B sync/main-to-app origin/app
+          git merge origin/main --no-edit || true
+          git add -A
+          git commit -m "chore: sync main into app (resolve conflicts)"
+
+      - name: Open PR on merge conflict
+        if: steps.merge.outputs.status == 'conflict'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: sync/main-to-app
+          base: app
+          delete-branch: true
+          title: "chore: sync main → app (충돌 해결 필요)"
+          body: |
+            ## Summary
+            `main`을 `app`에 자동 merge하는 중 **충돌**이 발생했습니다.
+
+            ## 해결 방법
+            1. 이 PR에서 충돌 파일(`<<<<<<<` 마커) 수정
+            2. merge 후 RunPod Pod **Stop → Start** (또는 `git fetch && git reset --hard origin/app`)
+
+            Manual: see [SYNC_BRANCHES.md](../blob/app/SYNC_BRANCHES.md)
+          labels: |
+            automation
+            sync
+            conflict

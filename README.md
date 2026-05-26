@@ -1,25 +1,6 @@
-# celebfit — AI 눈썹 스타일 변환
+# celebfit
 
-셀카 사진의 눈썹을 **연예인 스타일(고윤정·신세경·홍수주)** 로 바꿔 주는 프로젝트입니다.  
-ML 파이프라인 + FastAPI 서버 + 브라우저/Flutter 앱으로 구성되어 있습니다.
-
-> BrushNet은 사용하지 않습니다. 별도 체크포인트 다운로드 불필요.
-
----
-
-## 팀원 빠른 안내
-
-| 역할 | 브랜치 | 하는 일 |
-|------|--------|---------|
-| **ML / 파이프라인** | `main` | `pipeline/`, LoRA, 마스킹 코드 수정 |
-| **앱 / API / 배포** | `app` | Flutter UI, FastAPI, RunPod 설정 |
-
-**규칙 한 줄:** ML 코드는 **`main`에 push** → GitHub Action이 **`app`에 자동 반영**.  
-`app`에서 직접 ML 코드를 고치지 않습니다. (충돌·중복 방지)
-
----
-
-## 브랜치 구조
+## 팀원 안내
 
 ```
 main  ──push──▶  GitHub Action  ──merge──▶  app  ──▶  RunPod / 브라우저 미리보기
@@ -27,10 +8,13 @@ main  ──push──▶  GitHub Action  ──merge──▶  app  ──▶  
  ML 파이프라인                                   + Flutter + API + deploy
 ```
 
-| 브랜치 | 포함 내용 | 주요 폴더 |
-|--------|-----------|-----------|
-| **main** | ML만 | `pipeline/`, `masking_bisenet/`, `lora_checkpoint/` |
-| **app** | main + 서비스 | `celebfit_app/`, `api/`, `deploy/`, `scripts/` |
+| 브랜치 | 담당 | 주요 폴더 |
+|--------|------|-----------|
+| **main** | ML / 파이프라인 | `pipeline/`, `masking_bisenet/`, `lora_checkpoint/` |
+| **app** | 앱 / API / 배포 | `celebfit_app/`, `api/`, `deploy/`, `scripts/` |
+
+**규칙:** ML 코드는 **`main`에 push** → GitHub Action이 **`app`에 자동 반영**.  
+`app`에서 직접 ML 코드를 고치지 않습니다. (충돌·중복 방지)
 
 자동 sync 상세: [SYNC_BRANCHES.md](./SYNC_BRANCHES.md)
 

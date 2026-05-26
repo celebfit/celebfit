@@ -15,14 +15,15 @@ class StyleSelectScreen extends StatefulWidget {
 }
 
 class _StyleSelectScreenState extends State<StyleSelectScreen> {
-  String? _selectedFilter = '자연스러운';
+  CelebGender _gender = CelebGender.female;
 
-  List<EyebrowStyle> get _filteredStyles {
-    if (_selectedFilter == null) return kEyebrowStyles;
-    return kEyebrowStyles.where((s) => s.tags.contains(_selectedFilter)).toList();
+  List<EyebrowStyle> get _visibleStyles {
+    return _gender == CelebGender.female ? kFemaleEyebrowStyles : kMaleEyebrowStyles;
   }
 
   Future<void> _onApply(EyebrowStyle style) async {
+    if (!style.apiEnabled) return;
+
     final state = context.read<AppState>();
     state.selectStyle(style);
     final success = await state.applyStyle();
@@ -37,6 +38,7 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final styles = _visibleStyles;
 
     return Column(
       children: [
@@ -51,10 +53,16 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          FilterChipRow(
-                            filters: kStyleFilters,
-                            selected: _selectedFilter,
-                            onSelected: (f) => setState(() => _selectedFilter = f),
+                          GenderBanner(
+                            selected: _gender,
+                            onChanged: (gender) => setState(() => _gender = gender),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            _gender == CelebGender.female
+                                ? 'AI 변환 가능 · 여성 연예인 눈썹 스타일'
+                                : '남성 연예인 스타일 · 서비스 준비중',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                           ),
                           const SizedBox(height: 14),
                           GridView.builder(
@@ -66,14 +74,17 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
                               mainAxisSpacing: 10,
                               childAspectRatio: 0.72,
                             ),
-                            itemCount: _filteredStyles.length,
+                            itemCount: styles.length,
                             itemBuilder: (context, index) {
-                              final style = _filteredStyles[index];
+                              final style = styles[index];
                               return StylePreviewCard(
+                                compact: true,
                                 name: style.name,
-                                imageBytes: state.uploadedImageBytes,
-                                isLoading: state.isApplying &&
-                                    state.selectedStyle?.name == style.name,
+                                subtitle: style.subtitle,
+                                previewAsset: style.previewAsset,
+                                enabled: style.apiEnabled,
+                                isLoading:
+                                    state.isApplying && state.selectedStyle?.id == style.id,
                                 onApply: () => _onApply(style),
                               );
                             },

@@ -158,70 +158,161 @@ class MetricCard extends StatelessWidget {
     required this.value,
     this.icon,
     this.showDensityBar = false,
+    this.showDensityGrid = false,
+    this.compact = false,
   });
 
   final String label;
   final String value;
   final IconData? icon;
   final bool showDensityBar;
+  final bool showDensityGrid;
+  final bool compact;
+
+  static const _densityColors = [
+    Color(0xFFF5F0EA),
+    Color(0xFFE8DDD0),
+    Color(0xFFD4C4B0),
+    Color(0xFFB8A088),
+    Color(0xFF9A8570),
+    Color(0xFF7A6550),
+    Color(0xFF5C4A3A),
+    Color(0xFF3E3228),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: compact ? EdgeInsets.zero : const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 12,
+        vertical: compact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(compact ? 10 : 12),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 12, color: AppColors.textMuted),
+                Icon(icon, size: compact ? 11 : 12, color: AppColors.textMuted),
                 const SizedBox(width: 4),
               ],
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: compact ? 9 : 10,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
             ],
           ),
           if (value.isNotEmpty) ...[
-            const SizedBox(height: 2),
+            SizedBox(height: compact ? 1 : 2),
             Text(
               value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: compact ? 12 : 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
           if (showDensityBar) ...[
-            const SizedBox(height: 6),
+            SizedBox(height: compact ? 4 : 6),
             Container(
-              height: 8,
+              height: compact ? 7 : 8,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFFE8E4F0),
-                    Color(0xFFB8AED4),
-                    Color(0xFF8E7AB5),
-                    Color(0xFF5C5280),
+                    Color(0xFFF0EBE4),
+                    Color(0xFFD4C4B0),
+                    Color(0xFF9A8570),
+                    Color(0xFF5C4A3A),
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '연함',
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 9,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                Text(
+                  '진함',
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 9,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (showDensityGrid) ...[
+            SizedBox(height: compact ? 3 : 4),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 8,
+                crossAxisSpacing: 2,
+                mainAxisSpacing: 2,
+                childAspectRatio: 1,
+              ),
+              itemCount: 24,
+              itemBuilder: (context, index) {
+                final col = index % 8;
+                final row = index ~/ 8;
+                final tone = ((col / 7) * 0.55 + (row / 2) * 0.35).clamp(0.0, 1.0);
+                final colorIndex = (tone * (_densityColors.length - 1)).round();
+                return Container(
+                  decoration: BoxDecoration(
+                    color: _densityColors[colorIndex],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '연함',
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 9,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                Text(
+                  '진함',
+                  style: TextStyle(
+                    fontSize: compact ? 8 : 9,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
             ),
           ],
         ],

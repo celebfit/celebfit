@@ -22,98 +22,123 @@ class HomeScreen extends StatelessWidget {
     if (file == null || !context.mounted) return;
     final bytes = await file.readAsBytes();
     if (!context.mounted) return;
-    context.read<AppState>().setUploadedImage(bytes: bytes, path: file.path);
+    await context.read<AppState>().uploadImageWithScan(bytes: bytes, path: file.path);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
 
-    return Column(
+    return Stack(
       children: [
-        const AppHeader(showLogo: true, showBell: true),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('내 얼굴에 맞는\n눈썹 찾기', style: Theme.of(context).textTheme.headlineLarge),
-                const SizedBox(height: 16),
-                _PhotoFrame(imageBytes: state.uploadedImageBytes),
-                const SizedBox(height: 16),
-                PrimaryButton(
-                  label: '사진 업로드',
-                  icon: Icons.upload_rounded,
-                  onPressed: () => _pickImage(context, ImageSource.gallery),
-                ),
-                const SizedBox(height: 10),
-                Row(
+        Column(
+          children: [
+            const AppHeader(showLogo: true, showBell: true),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickImage(context, ImageSource.camera),
-                        icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                        label: const Text('카메라로 촬영'),
-                      ),
+                    Text('내 얼굴에 맞는\n눈썹 찾기', style: Theme.of(context).textTheme.headlineLarge),
+                    const SizedBox(height: 16),
+                    _PhotoFrame(
+                      imageBytes: state.uploadedImageBytes,
+                      isScanning: state.isScanning,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _pickImage(context, ImageSource.gallery),
-                        icon: const Icon(Icons.photo_library_outlined, size: 18),
-                        label: const Text('갤러리에서 선택'),
-                      ),
+                    const SizedBox(height: 16),
+                    PrimaryButton(
+                      label: '사진 업로드',
+                      icon: Icons.upload_rounded,
+                      onPressed: state.isScanning
+                          ? null
+                          : () => _pickImage(context, ImageSource.gallery),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: state.isScanning
+                                ? null
+                                : () => _pickImage(context, ImageSource.camera),
+                            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                            label: const Text('카메라로 촬영'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: state.isScanning
+                                ? null
+                                : () => _pickImage(context, ImageSource.gallery),
+                            icon: const Icon(Icons.photo_library_outlined, size: 18),
+                            label: const Text('갤러리에서 선택'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.lock_outline, size: 14, color: AppColors.textMuted),
+                        SizedBox(width: 6),
+                        Text('Safe data protection', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text('추후 확장 예정', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          _FutureModule(icon: Icons.visibility_outlined, label: '눈'),
-                          SizedBox(width: 28),
-                          _FutureModule(icon: Icons.face_outlined, label: '코'),
-                          SizedBox(width: 28),
-                          _FutureModule(icon: Icons.sentiment_satisfied_alt_outlined, label: '입'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.lock_outline, size: 14, color: AppColors.textMuted),
-                    SizedBox(width: 6),
-                    Text('Safe data protection', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
+        if (state.isScanning)
+          const Positioned.fill(
+            child: _ScanOverlay(),
+          ),
       ],
     );
   }
 }
 
-class _PhotoFrame extends StatelessWidget {
-  const _PhotoFrame({this.imageBytes});
+class _PhotoFrame extends StatefulWidget {
+  const _PhotoFrame({this.imageBytes, this.isScanning = false});
   final Uint8List? imageBytes;
+  final bool isScanning;
+
+  @override
+  State<_PhotoFrame> createState() => _PhotoFrameState();
+}
+
+class _PhotoFrameState extends State<_PhotoFrame> with SingleTickerProviderStateMixin {
+  late final AnimationController _scanController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_PhotoFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isScanning && !oldWidget.isScanning) {
+      _scanController.repeat();
+    } else if (!widget.isScanning && oldWidget.isScanning) {
+      _scanController.stop();
+      _scanController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scanController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,45 +146,110 @@ class _PhotoFrame extends StatelessWidget {
       aspectRatio: 3 / 4,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.xl),
-        child: Container(
-          color: AppColors.primarySoft,
-          child: imageBytes != null
-              ? Image.memory(imageBytes!, fit: BoxFit.cover)
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.add_a_photo_outlined, size: 48, color: AppColors.textMuted),
-                    SizedBox(height: 8),
-                    Text('정면 셀카를 업로드해주세요', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                  ],
-                ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              color: AppColors.primarySoft,
+              child: widget.imageBytes != null
+                  ? Image.memory(widget.imageBytes!, fit: BoxFit.cover)
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.add_a_photo_outlined, size: 48, color: AppColors.textMuted),
+                        SizedBox(height: 8),
+                        Text('정면 셀카를 업로드해주세요', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                      ],
+                    ),
+            ),
+            if (widget.isScanning)
+              AnimatedBuilder(
+                animation: _scanController,
+                builder: (context, child) {
+                  return CustomPaint(
+                    painter: _ScanLinePainter(progress: _scanController.value),
+                    child: Container(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      alignment: Alignment.bottomCenter,
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: const Text(
+                        'AI 얼굴 스캔 중...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          shadows: [Shadow(color: Colors.black45, blurRadius: 6)],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _FutureModule extends StatelessWidget {
-  const _FutureModule({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
+class _ScanLinePainter extends CustomPainter {
+  _ScanLinePainter({required this.progress});
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height * progress;
+    final linePaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.95)
+      ..strokeWidth = 2;
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
+
+    final glowPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.transparent,
+          AppColors.primary.withValues(alpha: 0.35),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, y - 30, size.width, 60));
+    canvas.drawRect(Rect.fromLTWH(0, y - 30, size.width, 60), glowPaint);
+  }
+
+  @override
+  bool shouldRepaint(_ScanLinePainter oldDelegate) => oldDelegate.progress != progress;
+}
+
+class _ScanOverlay extends StatelessWidget {
+  const _ScanOverlay();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.chipBg,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, size: 18, color: AppColors.textMuted),
+    return Container(
+      color: Colors.black.withValues(alpha: 0.35),
+      alignment: Alignment.center,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-      ],
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary),
+            ),
+            SizedBox(height: 14),
+            Text('사진 분석 준비 중', style: TextStyle(fontWeight: FontWeight.w600)),
+            SizedBox(height: 4),
+            Text('잠시 후 AI 분석 화면으로 이동합니다', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+          ],
+        ),
+      ),
     );
   }
 }

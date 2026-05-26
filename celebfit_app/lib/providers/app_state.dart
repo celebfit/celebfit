@@ -22,6 +22,7 @@ class AppState extends ChangeNotifier {
   String? _apiBaseUrl;
   String? _serverStatusMessage;
   bool _isCheckingServer = false;
+  bool _isScanning = false;
   int _currentTab = 0;
 
   Uint8List? get uploadedImageBytes => _uploadedImageBytes;
@@ -35,6 +36,7 @@ class AppState extends ChangeNotifier {
   String? get apiBaseUrl => _apiBaseUrl;
   String? get serverStatusMessage => _serverStatusMessage;
   bool get isCheckingServer => _isCheckingServer;
+  bool get isScanning => _isScanning;
   int get currentTab => _currentTab;
   bool get hasUploadedImage => _uploadedImageBytes != null;
   bool get hasResult => _resultAfterBytes != null;
@@ -101,6 +103,24 @@ class AppState extends ChangeNotifier {
     _selectedStyle = null;
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// 사진 업로드 → 스캔 연출 → 분석 탭 자동 이동
+  Future<void> uploadImageWithScan({required Uint8List bytes, String? path}) async {
+    setUploadedImage(bytes: bytes, path: path);
+    _isScanning = true;
+    notifyListeners();
+
+    try {
+      await Future.wait([
+        Future<void>.delayed(const Duration(milliseconds: 2400)),
+        checkServerHealth().catchError((_) => false),
+      ]);
+    } finally {
+      _isScanning = false;
+      _currentTab = 1;
+      notifyListeners();
+    }
   }
 
   void clearUploadedImage() {

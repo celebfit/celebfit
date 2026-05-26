@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
+import '../models/app_models.dart';
 import '../theme/app_theme.dart';
 
 class BeforeAfterSlider extends StatefulWidget {
@@ -130,18 +132,61 @@ class StylePreviewCard extends StatelessWidget {
   const StylePreviewCard({
     super.key,
     required this.name,
-    required this.imageBytes,
     required this.onApply,
+    this.subtitle,
+    this.description,
+    this.previewAsset,
+    this.imageBytes,
+    this.enabled = true,
     this.isLoading = false,
+    this.compact = false,
   });
 
   final String name;
+  final String? subtitle;
+  final String? description;
+  final String? previewAsset;
   final Uint8List? imageBytes;
   final VoidCallback onApply;
+  final bool enabled;
   final bool isLoading;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return _buildCompactCard();
+    }
+    return _buildListCard();
+  }
+
+  Widget _buildPreviewImage() {
+    if (previewAsset != null) {
+      if (previewAsset!.toLowerCase().endsWith('.svg')) {
+        return SvgPicture.asset(
+          previewAsset!,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          width: double.infinity,
+          height: double.infinity,
+        );
+      }
+      return Image.asset(
+        previewAsset!,
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        filterQuality: FilterQuality.high,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+    if (imageBytes != null) {
+      return Image.memory(imageBytes!, fit: BoxFit.cover, alignment: Alignment.topCenter);
+    }
+    return Container(color: AppColors.primarySoft, child: const _EyebrowPainterWidget());
+  }
+
+  Widget _buildListCard() {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -160,59 +205,255 @@ class StylePreviewCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-            child: AspectRatio(
-              aspectRatio: 1.35,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (imageBytes != null)
-                    Image.memory(imageBytes!, fit: BoxFit.cover, alignment: Alignment.topCenter)
-                  else
-                    Container(color: AppColors.primarySoft),
-                  CustomPaint(painter: _EyebrowPainter()),
-                ],
-              ),
-            ),
+            child: AspectRatio(aspectRatio: 16 / 9, child: _buildPreviewImage()),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    name,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                Material(
-                  color: AppColors.applyBtnBg,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InkWell(
-                    onTap: isLoading ? null : onApply,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      child: isLoading
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                            )
-                          : const Text(
-                              '적용하기',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: enabled ? AppColors.textPrimary : AppColors.textMuted,
+                            ),
+                          ),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                subtitle!,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryDark,
+                                ),
                               ),
                             ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    _ApplyButton(enabled: enabled, isLoading: isLoading, onApply: onApply),
+                  ],
+                ),
+                if (description != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    description!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCompactCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              child: _buildPreviewImage(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subtitle ?? name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: enabled ? AppColors.textPrimary : AppColors.textMuted,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          name,
+                          style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _ApplyButton(enabled: enabled, isLoading: isLoading, onApply: onApply),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ApplyButton extends StatelessWidget {
+  const _ApplyButton({
+    required this.enabled,
+    required this.isLoading,
+    required this.onApply,
+  });
+
+  final bool enabled;
+  final bool isLoading;
+  final VoidCallback onApply;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: enabled ? AppColors.applyBtnBg : AppColors.chipBg,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: enabled && !isLoading ? onApply : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: isLoading
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                )
+              : Text(
+                  enabled ? '적용하기' : '준비중',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: enabled ? AppColors.textSecondary : AppColors.textMuted,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EyebrowPainterWidget extends StatelessWidget {
+  const _EyebrowPainterWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(painter: _EyebrowPainter());
+  }
+}
+
+class GenderBanner extends StatelessWidget {
+  const GenderBanner({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final CelebGender selected;
+  final ValueChanged<CelebGender> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.chipBg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _GenderTab(
+              label: '여자 연예인',
+              selected: selected == CelebGender.female,
+              onTap: () => onChanged(CelebGender.female),
+            ),
+          ),
+          Expanded(
+            child: _GenderTab(
+              label: '남자 연예인',
+              selected: selected == CelebGender.male,
+              onTap: () => onChanged(CelebGender.male),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GenderTab extends StatelessWidget {
+  const _GenderTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.surface : Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      elevation: selected ? 1 : 0,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? AppColors.primary : AppColors.textMuted,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -249,25 +490,104 @@ class _EyebrowPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+class CelebrityMatchCard extends StatelessWidget {
+  const CelebrityMatchCard({super.key, required this.match});
+
+  final CelebrityMatch match;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: match.showCrown ? AppColors.primary : AppColors.border,
+            width: match.showCrown ? 1.5 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    match.previewAsset,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  if (match.showCrown)
+                    const Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Text('👑', style: TextStyle(fontSize: 14)),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    match.styleLabel,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    match.name,
+                    style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${match.percent}%',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class FaceLandmarkOverlay extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final line = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
-      ..strokeWidth = 1
+      ..color = Colors.white.withValues(alpha: 0.9)
+      ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
 
+    _drawDashedLine(
+      canvas,
+      Offset(size.width * 0.5, size.height * 0.08),
+      Offset(size.width * 0.5, size.height * 0.92),
+      line,
+    );
+
     final left = [
-      Offset(size.width * 0.22, size.height * 0.37),
-      Offset(size.width * 0.30, size.height * 0.35),
-      Offset(size.width * 0.38, size.height * 0.34),
-      Offset(size.width * 0.46, size.height * 0.36),
+      Offset(size.width * 0.14, size.height * 0.36),
+      Offset(size.width * 0.24, size.height * 0.33),
+      Offset(size.width * 0.34, size.height * 0.32),
+      Offset(size.width * 0.44, size.height * 0.34),
     ];
     final right = [
-      Offset(size.width * 0.54, size.height * 0.36),
-      Offset(size.width * 0.62, size.height * 0.34),
-      Offset(size.width * 0.70, size.height * 0.35),
-      Offset(size.width * 0.78, size.height * 0.37),
+      Offset(size.width * 0.56, size.height * 0.34),
+      Offset(size.width * 0.66, size.height * 0.32),
+      Offset(size.width * 0.76, size.height * 0.33),
+      Offset(size.width * 0.86, size.height * 0.36),
     ];
 
     for (final brow in [left, right]) {
@@ -275,9 +595,41 @@ class FaceLandmarkOverlay extends CustomPainter {
       for (final p in brow.skip(1)) {
         path.lineTo(p.dx, p.dy);
       }
-      canvas.drawPath(path, line);
+      _drawDashedPath(canvas, path, line);
       for (final p in brow) {
-        canvas.drawCircle(p, 3, Paint()..color = Colors.white);
+        canvas.drawCircle(
+          p,
+          2.5,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.fill,
+        );
+        canvas.drawCircle(
+          p,
+          2.5,
+          Paint()
+            ..color = Colors.white.withValues(alpha: 0.5)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1,
+        );
+      }
+    }
+  }
+
+  void _drawDashedLine(Canvas canvas, Offset start, Offset end, Paint paint) {
+    _drawDashedPath(canvas, Path()..moveTo(start.dx, start.dy)..lineTo(end.dx, end.dy), paint);
+  }
+
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint, {double dash = 4, double gap = 3}) {
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + gap;
       }
     }
   }

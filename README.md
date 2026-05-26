@@ -86,12 +86,3 @@ python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 | [RUNPOD.md](./RUNPOD.md) | GPU Pod 배포 |
 | [celebfit_app/README.md](./celebfit_app/README.md) | Flutter 앱 |
 
-**자주 묻는 질문**
-
-| 질문 | 답 |
-|------|-----|
-| main만 push하면 RunPod에 바로 반영되나? | Action이 app에 merge한 뒤, Pod **Stop → Start** 필요 |
-| 브라우저에서 AI가 안 돼요 | 상단 배너 **미연결** → RunPod URL 또는 로컬 API 실행 |
-| app 브랜치를 직접 수정해도 되나? | Flutter/API/deploy는 **app에 push**. ML 코드는 **main**에서 |
-
-GitHub: [github.com/celebfit/celebfit](https://github.com/celebfit/celebfit) (branch: **app**)

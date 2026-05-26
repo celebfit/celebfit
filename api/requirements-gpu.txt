@@ -1,0 +1,8 @@
+torch>=2.2.0
+torchvision>=0.17.0
+diffusers>=0.31.0
+transformers>=4.46.0
+accelerate>=1.1.0
+peft>=0.13.0
+safetensors>=0.4.5
+simple-lama-inpainting>=0.1.2

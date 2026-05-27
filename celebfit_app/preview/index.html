@@ -632,11 +632,15 @@
       const params = new URLSearchParams(location.search);
       const fromQuery = params.get('api');
       if (fromQuery) {
-        const normalized = normalizeApiBase(fromQuery);
-        localStorage.setItem(API_STORAGE_KEY, normalized);
-        return normalized;
+        const normalized = normalizeApiBase(decodeURIComponent(fromQuery));
+        if (normalized && !/YOUR_POD_ID/i.test(normalized)) {
+          localStorage.setItem(API_STORAGE_KEY, normalized);
+          return normalized;
+        }
       }
-      return normalizeApiBase(localStorage.getItem(API_STORAGE_KEY) || 'http://127.0.0.1:8000');
+      const saved = normalizeApiBase(localStorage.getItem(API_STORAGE_KEY) || '');
+      if (saved && !/YOUR_POD_ID/i.test(saved)) return saved;
+      return '';
     }
 
     let API_BASE = resolveApiBase();
@@ -813,11 +817,24 @@
 
     async function checkApi(){
       const el=document.getElementById('apiStatus');
+      if(!API_BASE){
+        apiOnline=false;
+        el.innerHTML='<span class="warn">미연결</span> · MY 탭에 RunPod URL 입력';
+        return;
+      }
+      if(/YOUR_POD_ID/i.test(API_BASE)){
+        apiOnline=false;
+        el.innerHTML='<span class="warn">미연결</span> · URL에 YOUR_POD_ID를 실제 Pod ID로 바꿔주세요';
+        return;
+      }
       try{
-        const r=await fetch(API_BASE+'/health',{signal:AbortSignal.timeout(8000)});
+        const r=await fetch(API_BASE+'/health',{signal:AbortSignal.timeout(15000),mode:'cors'});
         const j=await r.json(); apiOnline=r.ok;
         el.innerHTML=apiOnline?`<span class="ok">연결됨</span> · ${j.engine||'ready'}`:'<span class="warn">데모</span>';
-      }catch{ apiOnline=false; el.innerHTML='<span class="warn">미연결 · 데모</span>'; }
+      }catch{
+        apiOnline=false;
+        el.innerHTML='<span class="warn">미연결</span> · Pod Running·URL 확인 (MY 탭)';
+      }
     }
 
     async function saveApiUrl(){

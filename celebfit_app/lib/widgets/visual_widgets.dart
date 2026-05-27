@@ -196,7 +196,12 @@ class StylePreviewCard extends StatelessWidget {
   }
 
   Widget _buildListCard() {
+    const thumbHeight = 118.0;
+    const badgeSlotHeight = 24.0;
+    const descHeight = 32.0;
+
     return Container(
+      constraints: const BoxConstraints(minHeight: 228),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -218,33 +223,13 @@ class StylePreviewCard extends StatelessWidget {
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
             child: SizedBox(
-              height: 118,
+              height: thumbHeight,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   _buildPreviewImage(
-                    alignment: const Alignment(0, -0.16),
+                    alignment: const Alignment(0, -0.12),
                   ),
-                  if (isRecommended)
-                    Positioned(
-                      top: 10,
-                      left: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          '추천',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -254,6 +239,29 @@ class StylePreviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                SizedBox(
+                  height: badgeSlotHeight,
+                  child: isRecommended
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              '추천',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -273,12 +281,17 @@ class StylePreviewCard extends StatelessWidget {
                 ),
                 if (description != null) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    description!,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      height: 1.45,
-                      color: AppColors.textSecondary,
+                  SizedBox(
+                    height: descHeight,
+                    child: Text(
+                      description!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        height: 1.45,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                 ],

@@ -275,26 +275,33 @@
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow);
       display: flex; flex-direction: column;
+      min-height: 228px;
     }
     .style-card.recommended { border-color: var(--primary); box-shadow: 0 0 0 1px rgba(142,122,181,.15); }
     .style-thumb {
-      height: 118px; background: #f5f0ea; position: relative; overflow: hidden;
+      height: 118px; flex-shrink: 0; background: #f5f0ea; position: relative; overflow: hidden;
     }
     .style-thumb img {
-      width: 100%; height: 100%; object-fit: cover; object-position: center 42%;
+      width: 100%; height: 100%; object-fit: cover; object-position: center 38%;
       display: block; image-rendering: auto;
     }
-    .style-body { padding: 10px 12px 12px; }
-    .style-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .style-body {
+      padding: 10px 12px 12px; flex: 1; display: flex; flex-direction: column;
+      min-height: 110px;
+    }
+    .style-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
     .style-meta { min-width: 0; flex: 1; }
     .style-name { font-size: 16px; font-weight: 700; display: block; line-height: 1.2; color: var(--text); }
     .style-celeb { display: none; }
+    .style-badge-slot { min-height: 24px; margin-bottom: 0; display: flex; align-items: flex-start; }
     .style-badge {
-      display: inline-block; margin-bottom: 6px; padding: 3px 8px; border-radius: 999px;
+      display: inline-block; padding: 3px 8px; border-radius: 999px;
       background: var(--primary); color: #fff; font-size: 10px; font-weight: 700;
     }
     .style-desc {
-      display: block; margin-top: 6px; font-size: 11px; line-height: 1.45; color: var(--muted);
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; margin-top: 8px; min-height: 32px;
+      font-size: 11px; line-height: 1.45; color: var(--muted);
     }
     .style-apply {
       padding: 6px 12px; border: none; border-radius: 9px;
@@ -701,7 +708,7 @@
         <div class="style-card${isRecommended?' recommended':''}">
           <div class="style-thumb">${s.image ? `<img src="${s.image}" alt="${s.name}" />` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">준비중</div>`}</div>
           <div class="style-body">
-            ${isRecommended ? '<span class="style-badge">추천</span>' : ''}
+            <div class="style-badge-slot">${isRecommended ? '<span class="style-badge">추천</span>' : ''}</div>
             <div class="style-head">
               <div class="style-meta">
                 <span class="style-name">${s.name}</span>

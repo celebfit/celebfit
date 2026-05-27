@@ -3,6 +3,8 @@
 # Usage:
 #   ./scripts/open_app_preview.sh
 #   ./scripts/open_app_preview.sh https://YOUR_POD_ID-8000.proxy.runpod.net
+#   PREVIEW_BIND=0.0.0.0 ./scripts/open_app_preview.sh   # 같은 Wi-Fi 공유
+#   ./scripts/share_app_preview.sh --public                # 인터넷 공개 URL
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,6 +12,7 @@ APP_ROOT="$ROOT/celebfit_app"
 PREVIEW_PAGE="preview/index.html"
 API_URL="${1:-}"
 PORT="${PREVIEW_PORT:-8765}"
+BIND="${PREVIEW_BIND:-127.0.0.1}"
 PID_FILE="/tmp/celebfit-preview-${PORT}.pid"
 LOG_FILE="/tmp/celebfit-preview.log"
 
@@ -28,7 +31,6 @@ stop_preview() {
     fi
     rm -f "$PID_FILE"
   fi
-  # stale listener on port
   local stale
   stale="$(lsof -ti tcp:"$PORT" 2>/dev/null || true)"
   if [[ -n "$stale" ]]; then
@@ -37,19 +39,23 @@ stop_preview() {
   fi
 }
 
+health_check() {
+  curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/${PREVIEW_PAGE}" >/dev/null 2>&1
+}
+
 start_preview() {
-  if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/${PREVIEW_PAGE}" >/dev/null 2>&1; then
+  if health_check; then
     return 0
   fi
   stop_preview
-  echo "Starting preview server on http://127.0.0.1:${PORT}"
+  echo "Starting preview server on http://${BIND}:${PORT}"
   (
     cd "$APP_ROOT"
-    exec python3 -m http.server "$PORT" --bind 127.0.0.1
+    exec python3 -m http.server "$PORT" --bind "$BIND"
   ) >"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
   for _ in $(seq 1 20); do
-    if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/${PREVIEW_PAGE}" >/dev/null 2>&1; then
+    if health_check; then
       return 0
     fi
     sleep 0.25
@@ -76,10 +82,11 @@ cat <<EOF
 === celebfit 앱 미리보기 ===
 URL: $OPEN_URL
 
-1. 상단 배너 → "연결됨" 확인 (아니면 마이 탭에서 RunPod URL 저장)
+1. 상단 배너 → "연결됨" 확인 (아니면 MY 탭에서 RunPod URL 저장)
 2. 홈 → 사진 업로드
-3. 스타일 → 자연형 / 세미 아치 / 직선형 → 적용하기
+3. 스타일 → 고윤정 / 신세경 / 홍수주 → 적용
 4. 결과 → Before/After
 
-실제 AI: go_yoonjung, shin_sekyung, hong_sooju 만 RunPod API 호출
+팀·핸드폰 공유: ./scripts/share_app_preview.sh
+GitHub Pages: https://celebfit.github.io/celebfit/preview/index.html
 EOF

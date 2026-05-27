@@ -46,6 +46,24 @@ git checkout app
 
 **앱 사용:** 홈(사진) → 스타일(고윤정/신세경/홍수주 · 적용하기) → 결과(Before/After)
 
+### 팀·핸드폰에서 공유
+
+| 방법 | URL | 언제 쓰나 |
+|------|-----|-----------|
+| **GitHub Pages** (권장) | https://celebfit.github.io/celebfit/preview/index.html | `app` push 후 항상 접속 (HTTPS, 핸드폰 OK) |
+| **같은 Wi-Fi** | `./scripts/share_app_preview.sh` 출력 URL | 회의실·실습실 같은 네트워크 |
+| **임시 공개 URL** | `./scripts/share_app_preview.sh --public` | cloudflared 터널 (Mac 켜져 있어야 함) |
+
+GitHub Pages **최초 1회:** repo **Settings → Pages → Build and deployment → GitHub Actions** 선택.
+
+RunPod API 연동 URL 예:
+
+```
+https://celebfit.github.io/celebfit/preview/index.html?api=https://YOUR_POD_ID-8000.proxy.runpod.net
+```
+
+MY 탭에서 RunPod URL 저장해도 됩니다.
+
 ### API 연결 (실제 AI 변환)
 
 상단 배너 **연결됨**이어야 AI가 동작합니다. **미연결**이면 UI 데모만 됩니다.

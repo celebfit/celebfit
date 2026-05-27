@@ -66,14 +66,37 @@ const kFemaleEyebrowStyles = [
 
 const kMaleEyebrowStyles = <EyebrowStyle>[
   EyebrowStyle(
-    id: 'male_soon',
-    name: '남성 스타일',
-    subtitle: '준비중',
-    description: '차분·또렷·내추럴 등 남성 연예인 눈썹 스타일을 준비하고 있습니다.',
+    id: 'choi_siwon',
+    name: '최시원',
+    subtitle: '차분·또렷',
+    description: '굵고 정돈된 라인. 단단하고 신뢰감 있는 인상.',
     tags: ['또렷한 인상'],
-    mockColor: Color(0xFF7A8FA8),
+    mockColor: Color(0xFF6E7888),
     gender: CelebGender.male,
-    apiEnabled: false,
+    previewAsset: 'assets/celebs/choi_siwon.jpg',
+    apiEnabled: true,
+  ),
+  EyebrowStyle(
+    id: 'v',
+    name: '뷔',
+    subtitle: '소프트 아치',
+    description: '자연스러운 곡선. 부드럽고 깊이 있는 무드.',
+    tags: ['자연스러운'],
+    mockColor: Color(0xFF5A6478),
+    gender: CelebGender.male,
+    previewAsset: 'assets/celebs/v.jpg',
+    apiEnabled: true,
+  ),
+  EyebrowStyle(
+    id: 'cha_eunwoo',
+    name: '차은우',
+    subtitle: '깔끔 일자',
+    description: '선명한 일자 라인. 깔끔하고 청량한 인상.',
+    tags: ['또렷한 인상'],
+    mockColor: Color(0xFF8A9098),
+    gender: CelebGender.male,
+    previewAsset: 'assets/celebs/cha_eunwoo.jpg',
+    apiEnabled: true,
   ),
 ];
 
@@ -109,7 +132,10 @@ const kEyebrowStyles = [
   ),
 ];
 
-const kApiEyebrowStyles = kFemaleEyebrowStyles;
+const kApiEyebrowStyles = [
+  ...kFemaleEyebrowStyles,
+  ...kMaleEyebrowStyles,
+];
 
 class CelebrityMatch {
   const CelebrityMatch({
@@ -130,7 +156,7 @@ class CelebrityMatch {
 }
 
 EyebrowStyle? eyebrowStyleById(String id) {
-  for (final style in kFemaleEyebrowStyles) {
+  for (final style in kApiEyebrowStyles) {
     if (style.id == id) return style;
   }
   return null;

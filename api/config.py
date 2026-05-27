@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     model_repo_root: Path | None = None
     weights_dir: Path = project_root / "weights"
     assets_dir: Path = project_root / "api" / "assets"
-    lora_dir: Path = weights_dir / "lora" / "celeb_eyebrows_all_pro_v4"
+    lora_dir: Path = weights_dir / "lora" / "celeb_eyebrows_all_gender_integrated"
     bisenet_weights: Path = weights_dir / "79999_iter.pth"
     mediapipe_model: Path = weights_dir / "face_landmarker.task"
     template_path: Path = assets_dir / "eyebrow_template.png"

@@ -74,7 +74,7 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
                           Text(
                             _gender == CelebGender.female
                                 ? 'AI 변환 가능 · 여성 연예인 눈썹 스타일'
-                                : '남성 연예인 스타일 · 서비스 준비중',
+                                : 'AI 변환 가능 · 남성 연예인 눈썹 스타일',
                             style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                           ),
                           const SizedBox(height: 14),

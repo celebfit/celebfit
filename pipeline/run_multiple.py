@@ -88,14 +88,16 @@ def main():
     pipe.to(device)
 
     # 2. Check and Load Unified/Individual LoRA
-    unified_lora_path = os.path.join(root_path, "lora_checkpoint/celeb_eyebrows_all_pro_v4")
+    from pipeline.main import resolve_lora_checkpoint_path
+
+    unified_lora_path, _ = resolve_lora_checkpoint_path()
     unified_lora_v2_path = os.path.join(root_path, "data/ckpt/celeb_eyebrows_all_pro_v2")
     
     # We will load LoRA using V4 unified as default
     selected_lora_path = None
     if os.path.exists(os.path.join(unified_lora_path, "unet")):
         selected_lora_path = unified_lora_path
-        print(f"✅ Selected Unified V4 LoRA checkpoint.")
+        print(f"✅ Selected unified LoRA checkpoint: {unified_lora_path}")
     elif os.path.exists(os.path.join(unified_lora_v2_path, "unet")):
         selected_lora_path = unified_lora_v2_path
         print(f"✅ Selected Unified V2 LoRA checkpoint (fallback).")

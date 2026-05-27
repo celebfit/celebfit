@@ -389,25 +389,25 @@ class _ApplyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: enabled ? AppColors.applyBtnBg : AppColors.chipBg,
-      borderRadius: BorderRadius.circular(compact ? 7 : 8),
+      borderRadius: BorderRadius.circular(compact ? 8 : 9),
       child: InkWell(
         onTap: enabled && !isLoading ? onApply : null,
-        borderRadius: BorderRadius.circular(compact ? 7 : 8),
+        borderRadius: BorderRadius.circular(compact ? 8 : 9),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: compact ? 8 : 10,
-            vertical: compact ? 4 : 6,
+            horizontal: compact ? 10 : 12,
+            vertical: compact ? 5 : 7,
           ),
           child: isLoading
               ? const SizedBox(
-                  width: 14,
-                  height: 14,
+                  width: 15,
+                  height: 15,
                   child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                 )
               : Text(
                   enabled ? (compact ? '적용' : '적용하기') : '준비중',
                   style: TextStyle(
-                    fontSize: compact ? 10 : 11,
+                    fontSize: compact ? 11 : 12,
                     fontWeight: FontWeight.w500,
                     color: enabled ? AppColors.textSecondary : AppColors.textMuted,
                   ),

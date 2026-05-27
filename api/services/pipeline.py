@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 from api.config import Settings
-from api.services.assets import ensure_runtime_assets
+from api.services.assets import ensure_runtime_assets, resolve_lora_dir
 from api.services.inpaint_service import FallbackStyleService, image_to_bytes
 from api.services.mask_service import FaceMaskService
 from api.style_catalog import STYLE_BY_ID, StyleDefinition
@@ -104,9 +104,10 @@ class EyebrowPipeline:
             from api.services.inpaint_service import InpaintService, LamaService
 
             self.lama_service = LamaService()
+            lora_dir = resolve_lora_dir(self.settings)
             self.inpaint_service = InpaintService(
                 base_model_id=self.settings.base_model_id,
-                lora_dir=self.settings.lora_dir,
+                lora_dir=lora_dir,
                 device=self.device,
                 infer_steps=self.settings.infer_steps,
                 lora_scale=self.settings.lora_scale,

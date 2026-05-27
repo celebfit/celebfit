@@ -56,7 +56,7 @@ chmod +x api/run.sh
 
 - MediaPipe `face_landmarker.task`
 - BiSeNet `79999_iter.pth`
-- GitHub LoRA (`celeb_eyebrows_all_pro_v4`)
+- GitHub LoRA (`celeb_eyebrows_all_gender_integrated`, v4 fallback)
 - epiCRealism + LaMa (diffusers/simple-lama-inpainting)
 
 `weights/` 폴더에 저장됩니다.

@@ -297,9 +297,9 @@
       display: block; margin-top: 6px; font-size: 11px; line-height: 1.45; color: var(--muted);
     }
     .style-apply {
-      padding: 4px 8px; border: none; border-radius: 7px;
+      padding: 5px 10px; border: none; border-radius: 8px;
       background: var(--apply-bg); color: var(--muted);
-      font-size: 10px; font-weight: 500; cursor: pointer; font-family: inherit;
+      font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit;
       white-space: nowrap; flex-shrink: 0;
     }
     .style-apply:disabled { opacity: .55; cursor: not-allowed; }
@@ -655,7 +655,9 @@
       { id:'hong_sooju', name:'홍수주', subtitle:'직선형', description:'깔끔한 일자 라인. 미니멀하고 시크한 인상.', image:'../assets/celebs/hong_sooju.jpg', apiEnabled:true, gender:'female' },
     ];
     const MALE_STYLES = [
-      { id:'male_soon', name:'남성 스타일', subtitle:'준비중', description:'차분·또렷·내추럴 등 남성 연예인 눈썹 스타일을 준비하고 있습니다.', image:'', apiEnabled:false, gender:'male' },
+      { id:'choi_siwon', name:'최시원', subtitle:'차분·또렷', description:'굵고 정돈된 라인. 단단하고 신뢰감 있는 인상.', image:'../assets/celebs/choi_siwon.jpg', apiEnabled:true, gender:'male' },
+      { id:'v', name:'뷔', subtitle:'소프트 아치', description:'자연스러운 곡선. 부드럽고 깊이 있는 무드.', image:'../assets/celebs/v.jpg', apiEnabled:true, gender:'male' },
+      { id:'cha_eunwoo', name:'차은우', subtitle:'깔끔 일자', description:'선명한 일자 라인. 깔끔하고 청량한 인상.', image:'../assets/celebs/cha_eunwoo.jpg', apiEnabled:true, gender:'male' },
     ];
     let currentGender='female';
     let recommendedStyleId=null;
@@ -691,7 +693,7 @@
       } else {
         hint.textContent=currentGender==='female'
           ? 'AI 변환 가능 · 여성 연예인 눈썹 스타일'
-          : '남성 연예인 스타일 · 서비스 준비중';
+          : 'AI 변환 가능 · 남성 연예인 눈썹 스타일';
       }
       document.getElementById('styleGrid').innerHTML = styles.map(s=>{
         const isRecommended=s.id===recommendedStyleId;
@@ -796,7 +798,7 @@
         img.onload=()=>{
           const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
           const ctx=c.getContext('2d'); ctx.drawImage(img,0,0);
-          const tints={go_yoonjung:[92,68,58],shin_sekyung:[78,58,48],hong_sooju:[88,72,62],natural:[96,76,66],soft_arch:[84,64,54],straight:[90,70,60]};
+          const tints={go_yoonjung:[92,68,58],shin_sekyung:[78,58,48],hong_sooju:[88,72,62],choi_siwon:[72,62,54],v:[68,58,50],cha_eunwoo:[80,70,62],natural:[96,76,66],soft_arch:[84,64,54],straight:[90,70,60]};
           const [r,g,b]=tints[styleId]||[90,70,60];
           const y0=img.height*.28,y1=img.height*.42;
           const d=ctx.getImageData(0,y0,img.width,y1-y0);

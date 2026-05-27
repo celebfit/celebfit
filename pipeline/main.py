@@ -150,9 +150,26 @@ def color_transfer(src, ref, mask):
             src_lab[:, :, i] = src_channel - mean_src + mean_ref
     return cv2.cvtColor(np.clip(src_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
+def resolve_lora_checkpoint_path():
+    candidates = [
+        "celeb_eyebrows_all_gender_integrated",
+        "celeb_eyebrows_all_pro_v4",
+    ]
+    for name in candidates:
+        path = os.path.join(root_path, "lora_checkpoint", name)
+        unet_weights = os.path.join(path, "unet", "adapter_model.safetensors")
+        if os.path.isfile(unet_weights):
+            return path, name
+    raise FileNotFoundError(
+        "LoRA checkpoint not found. Expected one of "
+        + ", ".join(candidates)
+        + f" under {os.path.join(root_path, 'lora_checkpoint')}"
+    )
+
+
 def load_models():
     base_model_path = "emilianJR/epiCRealism"
-    v4_lora_path = os.path.join(root_path, "lora_checkpoint/celeb_eyebrows_all_pro_v4")
+    lora_path, lora_name = resolve_lora_checkpoint_path()
 
     if torch.cuda.is_available():
         device = "cuda"
@@ -164,7 +181,7 @@ def load_models():
         device = "cpu"
         dtype = torch.float32
 
-    print(f"Loading base pipeline and loading V4 LoRA checkpoint on {device}...")
+    print(f"Loading base pipeline and LoRA checkpoint ({lora_name}) on {device}...")
 
     text_encoder = CLIPTextModel.from_pretrained(base_model_path, subfolder="text_encoder", torch_dtype=dtype)
     vae = AutoencoderKL.from_pretrained(base_model_path, subfolder="vae", torch_dtype=dtype)
@@ -175,10 +192,11 @@ def load_models():
         torch_dtype=dtype, low_cpu_mem_usage=True, safety_checker=None
     )
 
-    pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(v4_lora_path, "unet"), adapter_name="unified_v4")
-    pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(v4_lora_path, "text_encoder"), adapter_name="unified_v4")
-    pipe.set_adapters(["unified_v4"], adapter_weights=[1.15])
-    print(f"✅ Loaded LoRA V4 checkpoint.")
+    adapter_name = "unified_celeb"
+    pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(lora_path, "unet"), adapter_name=adapter_name)
+    pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(lora_path, "text_encoder"), adapter_name=adapter_name)
+    pipe.set_adapters([adapter_name], adapter_weights=[1.15])
+    print(f"✅ Loaded LoRA checkpoint: {lora_name}")
 
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     if device != "cuda":
@@ -309,7 +327,7 @@ if __name__ == "__main__":
         "raw_face_data/seed1000166.png",
         "raw_face_data/seed1000187.png"
     ]
-    celebs = ["고윤정", "신세경", "홍수주"]
+    celebs = ["고윤정", "신세경", "홍수주", "최시원", "뷔", "차은우"]
 
     print("Starting batch inference for main pipeline...")
     pipe, lama, device = load_models()

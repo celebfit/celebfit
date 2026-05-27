@@ -38,6 +38,27 @@ STYLES: list[StyleDefinition] = [
         celeb_prompt="홍수주",
     ),
     StyleDefinition(
+        id="choi_siwon",
+        name="최시원",
+        label="차분·또렷",
+        tags=["차분", "또렷한인상"],
+        celeb_prompt="최시원",
+    ),
+    StyleDefinition(
+        id="v",
+        name="뷔",
+        label="소프트 아치",
+        tags=["소프트 아치", "자연"],
+        celeb_prompt="뷔",
+    ),
+    StyleDefinition(
+        id="cha_eunwoo",
+        name="차은우",
+        label="깔끔 일자",
+        tags=["일자", "선명한인상"],
+        celeb_prompt="차은우",
+    ),
+    StyleDefinition(
         id="natural",
         name="내추럴",
         label="자연",

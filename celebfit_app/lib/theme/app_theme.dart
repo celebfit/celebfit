@@ -14,7 +14,8 @@ class AppColors {
   static const textMuted = Color(0xFFB0B0B5);
   static const border = Color(0xFFE8E6EE);
   static const chipBg = Color(0xFFF5F4F8);
-  static const applyBtnBg = Color(0xFFF5F4F8);
+  static const applyBtnBg = Color(0xFF8E7AB5);
+  static const applyBtnText = Color(0xFFFFFFFF);
   static const navInactive = Color(0xFFB0B0B5);
   static const heart = Color(0xFFE87890);
 }

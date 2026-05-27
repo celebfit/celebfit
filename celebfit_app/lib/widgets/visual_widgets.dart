@@ -258,36 +258,14 @@ class StylePreviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: enabled ? AppColors.textPrimary : AppColors.textMuted,
-                            ),
-                          ),
-                          if (subtitle != null) ...[
-                            const SizedBox(height: 3),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryLight,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                subtitle!,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primaryDark,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: enabled ? AppColors.textPrimary : AppColors.textMuted,
+                          height: 1.2,
+                        ),
                       ),
                     ),
                     _ApplyButton(enabled: enabled, isLoading: isLoading, onApply: onApply, compact: true),
@@ -341,25 +319,13 @@ class StylePreviewCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        subtitle ?? name,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: enabled ? AppColors.textPrimary : AppColors.textMuted,
-                        ),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          name,
-                          style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
-                        ),
-                      ],
-                    ],
+                  child: Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: enabled ? AppColors.textPrimary : AppColors.textMuted,
+                    ),
                   ),
                 ),
                 _ApplyButton(enabled: enabled, isLoading: isLoading, onApply: onApply),
@@ -389,27 +355,30 @@ class _ApplyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: enabled ? AppColors.applyBtnBg : AppColors.chipBg,
-      borderRadius: BorderRadius.circular(compact ? 8 : 9),
+      borderRadius: BorderRadius.circular(compact ? 9 : 10),
       child: InkWell(
         onTap: enabled && !isLoading ? onApply : null,
-        borderRadius: BorderRadius.circular(compact ? 8 : 9),
+        borderRadius: BorderRadius.circular(compact ? 9 : 10),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: compact ? 10 : 12,
-            vertical: compact ? 5 : 7,
+            horizontal: compact ? 12 : 14,
+            vertical: compact ? 6 : 8,
           ),
           child: isLoading
-              ? const SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+              ? SizedBox(
+                  width: compact ? 16 : 18,
+                  height: compact ? 16 : 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: enabled ? AppColors.applyBtnText : AppColors.primary,
+                  ),
                 )
               : Text(
                   enabled ? (compact ? '적용' : '적용하기') : '준비중',
                   style: TextStyle(
-                    fontSize: compact ? 11 : 12,
-                    fontWeight: FontWeight.w500,
-                    color: enabled ? AppColors.textSecondary : AppColors.textMuted,
+                    fontSize: compact ? 12 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? AppColors.applyBtnText : AppColors.textMuted,
                   ),
                 ),
         ),

@@ -287,8 +287,8 @@
     .style-body { padding: 10px 12px 12px; }
     .style-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .style-meta { min-width: 0; flex: 1; }
-    .style-name { font-size: 14px; font-weight: 700; display: block; line-height: 1.2; }
-    .style-celeb { display: block; font-size: 11px; color: var(--primary-dark); font-weight: 600; margin-bottom: 2px; }
+    .style-name { font-size: 16px; font-weight: 700; display: block; line-height: 1.2; color: var(--text); }
+    .style-celeb { display: none; }
     .style-badge {
       display: inline-block; margin-bottom: 6px; padding: 3px 8px; border-radius: 999px;
       background: var(--primary); color: #fff; font-size: 10px; font-weight: 700;
@@ -297,12 +297,12 @@
       display: block; margin-top: 6px; font-size: 11px; line-height: 1.45; color: var(--muted);
     }
     .style-apply {
-      padding: 5px 10px; border: none; border-radius: 8px;
-      background: var(--apply-bg); color: var(--muted);
-      font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit;
+      padding: 6px 12px; border: none; border-radius: 9px;
+      background: var(--primary); color: #fff;
+      font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
       white-space: nowrap; flex-shrink: 0;
     }
-    .style-apply:disabled { opacity: .55; cursor: not-allowed; }
+    .style-apply:disabled { opacity: .55; cursor: not-allowed; background: var(--apply-bg); color: var(--muted); font-weight: 500; }
 
     /* Result */
     .compare-wrap {
@@ -704,8 +704,7 @@
             ${isRecommended ? '<span class="style-badge">추천</span>' : ''}
             <div class="style-head">
               <div class="style-meta">
-                <span class="style-celeb">${s.name}</span>
-                <span class="style-name">${s.subtitle}</span>
+                <span class="style-name">${s.name}</span>
               </div>
               <button class="style-apply" ${s.apiEnabled ? '' : 'disabled'}
                 onclick="applyStyle('${s.id}','${s.name}')">${s.apiEnabled ? '적용' : '준비중'}</button>

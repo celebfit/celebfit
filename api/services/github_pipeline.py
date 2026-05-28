@@ -149,7 +149,7 @@ class GitHubEyebrowPipeline:
 
         result_bgr_512 = cv2.cvtColor(np.array(output_pil), cv2.COLOR_RGB2BGR)
         corrected_bgr_512 = helpers["color_transfer"](result_bgr_512, masked_image_512, mask_512_binary)
-        restored_full = helpers["restore_crop"](corrected_bgr_512, crop_info, original_bgr.shape)
+        #restored_full = helpers["restore_crop"](corrected_bgr_512, crop_info, original_bgr.shape)
         restored_erased_full = helpers["restore_crop"](masked_image_512, crop_info, original_bgr.shape)
 
         orig_mask_np = raw_mask_base.astype(np.float32) / 255.0
@@ -181,7 +181,8 @@ class GitHubEyebrowPipeline:
         restored_mask_np = restored_mask.astype(np.float32) / 255.0
         if len(restored_mask_np.shape) == 2:
           restored_mask_np = restored_mask_np[:, :, np.newaxis]
-          restored_mask_blurred = cv2.GaussianBlur(restored_mask_np, (ksize, ksize), 0)
+        restored_mask_blurred = cv2.GaussianBlur(restored_mask_np, (ksize, ksize), 0)
+        
         if len(restored_mask_blurred.shape) == 2:
           restored_mask_blurred = restored_mask_blurred[:, :, np.newaxis]
 

@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+from __future__ import annotatio
 import io
 from pathlib import Path
 
@@ -111,7 +110,7 @@ class InpaintService:
 
         original_size = base_image.size
         init_512 = base_image.resize((512, 512))
-        mask_512 = Image.fromarray(cv2.resize(inpaint_mask, (512, 512))).convert("L")
+        mask_512 = Image.fromarray(cv2.resize(inpaint_mask, (512, 512), interpolation=cv2.INTER_NEAREST)).convert("L")
 
         scale = self.lora_scale if style.celeb_prompt else max(0.35, self.lora_scale * 0.5)
         generator = torch.Generator(device=self.device).manual_seed(self.seed)

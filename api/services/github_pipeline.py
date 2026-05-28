@@ -15,13 +15,10 @@ from PIL import Image, ImageOps
 logger = logging.getLogger(__name__)
 
 UNIFIED_PROMPT_TEMPLATE = (
-    "a photo of {celeb} style eyebrows on a face, highly detailed, "
-    "realistic skin texture, natural skin pores"
+    "a photo of {celeb} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
 )
 UNIFIED_NEGATIVE_PROMPT = (
-    "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows, "
-    "painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, blurry, "
-    "plastic, purple patches, colorful noise, burnt, high contrast, hard edges, dirty skin"
+    "low quality, distorted, blurry, messy, ugly, asymmetric eyebrows, double eyebrows,painted, drawing, illustration, cartoon, fake, 3d render, smooth skin, blurry, plastic, purple patches, colorful noise, burnt, high contrast, hard edges, dirty skin"
 )
 
 
@@ -110,7 +107,7 @@ class GitHubEyebrowPipeline:
 
         helpers = self._helpers
         raw_mask_base = helpers["generate_bisenet_face_parts_mask"](original_bgr, parts=["eyebrows"])
-        raw_mask_base = helpers["dilate_mask"](raw_mask_base, pixels=1)
+        raw_mask_base = helpers["dilate_mask"](raw_mask_base, pixels=0)
         raw_mask_base = helpers["smooth_mask"](raw_mask_base)
 
         crop_info = helpers["get_zoom_crop_info"](
@@ -171,7 +168,7 @@ class GitHubEyebrowPipeline:
         if np.sum(new_raw_mask) == 0:
             new_processed_mask = mask_512_binary
         else:
-            new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=1))
+            new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=0))
 
         new_restored_mask = helpers["restore_crop"](new_processed_mask, crop_info, original_bgr.shape[:2])
         new_mask_np = new_restored_mask.astype(np.float32) / 255.0

@@ -166,22 +166,49 @@ class GitHubEyebrowPipeline:
 
         new_raw_mask = helpers["generate_bisenet_face_parts_mask"](corrected_bgr_512, parts=["eyebrows"])
         if np.sum(new_raw_mask) == 0:
-            new_processed_mask = mask_512_binary
+          new_processed_mask = mask_512_binary
         else:
-            new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=0))
+          new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=1))
 
-        new_restored_mask = helpers["restore_crop"](new_processed_mask, crop_info, original_bgr.shape[:2])
-        new_mask_np = new_restored_mask.astype(np.float32) / 255.0
-        if len(new_mask_np.shape) == 2:
-            new_mask_np = new_mask_np[:, :, np.newaxis]
-        new_mask_blurred = cv2.GaussianBlur(new_mask_np, (ksize, ksize), 0)
-        if len(new_mask_blurred.shape) == 2:
-            new_mask_blurred = new_mask_blurred[:, :, np.newaxis]
+        # 512x512에서 마스크 먼저 적용 → 눈썹 픽셀만 남김
+        mask_float_512 = new_processed_mask.astype(np.float32) / 255.0
+        eyebrow_only_512 = (corrected_bgr_512 * mask_float_512[:, :, np.newaxis]).astype(np.uint8)
+
+        # 원본 크기로 복원
+        restored_eyebrow = helpers["restore_crop"](eyebrow_only_512, crop_info, original_bgr.shape)
+        restored_mask = helpers["restore_crop"](new_processed_mask, crop_info, original_bgr.shape[:2])
+
+        restored_mask_np = restored_mask.astype(np.float32) / 255.0
+        if len(restored_mask_np.shape) == 2:
+          restored_mask_np = restored_mask_np[:, :, np.newaxis]
+          restored_mask_blurred = cv2.GaussianBlur(restored_mask_np, (ksize, ksize), 0)
+        if len(restored_mask_blurred.shape) == 2:
+          restored_mask_blurred = restored_mask_blurred[:, :, np.newaxis]
 
         final_result_bgr = (
-            restored_full * new_mask_blurred + original_erased_bgr * (1.0 - new_mask_blurred)
+          restored_eyebrow * restored_mask_blurred + original_erased_bgr * (1.0 - restored_mask_blurred)
         ).astype(np.uint8)
+        
+        ###################### 원본 ######################
 
+#        new_raw_mask = helpers["generate_bisenet_face_parts_mask"](corrected_bgr_512, parts=["eyebrows"])
+#        if np.sum(new_raw_mask) == 0:
+#            new_processed_mask = mask_512_binary
+#        else:
+#            new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=0))
+
+#        new_restored_mask = helpers["restore_crop"](new_processed_mask, crop_info, original_bgr.shape[:2])
+#        new_mask_np = new_restored_mask.astype(np.float32) / 255.0
+#        if len(new_mask_np.shape) == 2:
+#            new_mask_np = new_mask_np[:, :, np.newaxis]
+#        new_mask_blurred = cv2.GaussianBlur(new_mask_np, (ksize, ksize), 0)
+#        if len(new_mask_blurred.shape) == 2:
+#            new_mask_blurred = new_mask_blurred[:, :, np.newaxis]
+#
+#        final_result_bgr = (
+#            restored_full * new_mask_blurred + original_erased_bgr * (1.0 - new_mask_blurred)
+#        ).astype(np.uint8)
+        ################################## 여기까지 ################################
         before_bytes = self._encode_jpeg(original_bgr)
         after_bytes = self._encode_jpeg(final_result_bgr)
         return before_bytes, after_bytes

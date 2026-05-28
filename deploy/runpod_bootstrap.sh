@@ -29,9 +29,15 @@ fi
 sync_repo() {
   if [[ -d "$REPO_DIR/.git" ]]; then
     echo "Updating existing repo at $REPO_DIR..."
-    if git -C "$REPO_DIR" fetch --depth 1 origin "$BRANCH" &&
-      git -C "$REPO_DIR" checkout "$BRANCH" &&
-      git -C "$REPO_DIR" reset --hard "origin/$BRANCH"; then
+    set +e
+    git -C "$REPO_DIR" fetch --depth 1 origin "$BRANCH"
+    fetch_status=$?
+    git -C "$REPO_DIR" checkout "$BRANCH"
+    checkout_status=$?
+    git -C "$REPO_DIR" reset --hard "origin/$BRANCH"
+    reset_status=$?
+    set -e
+    if [[ $fetch_status -eq 0 && $checkout_status -eq 0 && $reset_status -eq 0 ]]; then
       return 0
     fi
     echo "Repo update failed (stale shallow clone). Re-cloning..."

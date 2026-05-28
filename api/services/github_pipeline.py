@@ -110,7 +110,7 @@ class GitHubEyebrowPipeline:
 
         helpers = self._helpers
         raw_mask_base = helpers["generate_bisenet_face_parts_mask"](original_bgr, parts=["eyebrows"])
-        raw_mask_base = helpers["dilate_mask"](raw_mask_base, pixels=15)
+        raw_mask_base = helpers["dilate_mask"](raw_mask_base, pixels=1)
         raw_mask_base = helpers["smooth_mask"](raw_mask_base)
 
         crop_info = helpers["get_zoom_crop_info"](
@@ -171,7 +171,7 @@ class GitHubEyebrowPipeline:
         if np.sum(new_raw_mask) == 0:
             new_processed_mask = mask_512_binary
         else:
-            new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=15))
+            new_processed_mask = helpers["smooth_mask"](helpers["dilate_mask"](new_raw_mask, pixels=1))
 
         new_restored_mask = helpers["restore_crop"](new_processed_mask, crop_info, original_bgr.shape[:2])
         new_mask_np = new_restored_mask.astype(np.float32) / 255.0

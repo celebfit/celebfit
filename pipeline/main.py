@@ -182,7 +182,7 @@ def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
 
     # 1. Mask Generation on original face
     raw_mask_base = generate_bisenet_face_parts_mask(original_bgr, parts=["eyebrows"])
-    raw_mask_base = dilate_mask(raw_mask_base, pixels=15)
+    raw_mask_base = dilate_mask(raw_mask_base, pixels=1)
     raw_mask_base = smooth_mask(raw_mask_base)
 
     # 2. Crop to 512x512 (Using closer zoom crop for higher detail resolution)

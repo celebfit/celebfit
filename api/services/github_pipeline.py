@@ -156,7 +156,7 @@ class GitHubEyebrowPipeline:
         if len(orig_mask_np.shape) == 2:
             orig_mask_np = orig_mask_np[:, :, np.newaxis]
 
-        ksize = int(max(original_bgr.shape[:2]) * 0.015) | 1
+        ksize = int(max(original_bgr.shape[:2]) * 0.008) | 1
         orig_mask_blurred = cv2.GaussianBlur(orig_mask_np, (ksize, ksize), 0)
         if len(orig_mask_blurred.shape) == 2:
             orig_mask_blurred = orig_mask_blurred[:, :, np.newaxis]
@@ -190,7 +190,6 @@ class GitHubEyebrowPipeline:
 #          restored_eyebrow * restored_mask_blurred + original_erased_bgr * (1.0 - restored_mask_blurred)
 #        ).astype(np.uint8)
         
-        ###################### 원본 ######################
 
         new_raw_mask = helpers["generate_bisenet_face_parts_mask"](corrected_bgr_512, parts=["eyebrows"])
         if np.sum(new_raw_mask) == 0:
@@ -209,7 +208,8 @@ class GitHubEyebrowPipeline:
         final_result_bgr = (
             restored_full * new_mask_blurred + original_erased_bgr * (1.0 - new_mask_blurred)
         ).astype(np.uint8)
-        ################################## 여기까지 ################################
+
+        
         before_bytes = self._encode_jpeg(original_bgr)
         after_bytes = self._encode_jpeg(final_result_bgr)
         return before_bytes, after_bytes

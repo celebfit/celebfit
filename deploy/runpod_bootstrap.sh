@@ -26,20 +26,26 @@ if command -v apt-get >/dev/null 2>&1; then
     libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 libgl1 >/dev/null
 fi
 
-if [[ -d "$REPO_DIR/.git" ]]; then
-  echo "Updating existing repo at $REPO_DIR..."
-  git -C "$REPO_DIR" fetch --depth 1 origin "$BRANCH"
-  git -C "$REPO_DIR" checkout "$BRANCH"
-  git -C "$REPO_DIR" reset --hard "origin/$BRANCH"
-elif [[ -e "$REPO_DIR" ]]; then
-  echo "Removing incomplete repo at $REPO_DIR..."
-  rm -rf "$REPO_DIR"
+sync_repo() {
+  if [[ -d "$REPO_DIR/.git" ]]; then
+    echo "Updating existing repo at $REPO_DIR..."
+    if git -C "$REPO_DIR" fetch --depth 1 origin "$BRANCH" &&
+      git -C "$REPO_DIR" checkout "$BRANCH" &&
+      git -C "$REPO_DIR" reset --hard "origin/$BRANCH"; then
+      return 0
+    fi
+    echo "Repo update failed (stale shallow clone). Re-cloning..."
+    rm -rf "$REPO_DIR"
+  elif [[ -e "$REPO_DIR" ]]; then
+    echo "Removing incomplete repo at $REPO_DIR..."
+    rm -rf "$REPO_DIR"
+  fi
+
   echo "Cloning $REPO_URL (branch $BRANCH)..."
   git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
-else
-  echo "Cloning $REPO_URL (branch $BRANCH)..."
-  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
-fi
+}
+
+sync_repo
 
 cd "$REPO_DIR"
 mkdir -p "$REPO_DIR/weights"

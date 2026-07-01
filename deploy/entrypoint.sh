@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ROOT="${APP_ROOT:-${MODEL_REPO_ROOT:-/app}}"
+REPO_DIR="${REPO_DIR:-/workspace/celebfit}"
+APP_ROOT="${APP_ROOT:-${MODEL_REPO_ROOT:-$REPO_DIR}}"
+
+if [[ ! -d "$APP_ROOT" ]]; then
+  echo "ERROR: celebfit repo not found at $APP_ROOT" >&2
+  echo "Run bootstrap first or set APP_ROOT=/workspace/celebfit" >&2
+  exit 1
+fi
+
 cd "$APP_ROOT"
 
 export PYTHONPATH="$APP_ROOT"
@@ -17,6 +25,11 @@ mkdir -p "$HF_HOME" "$TORCH_HOME" "$APP_ROOT/weights"
 if [[ "${WARMUP_ON_START:-true}" == "true" ]]; then
   echo "Warming up SD pipeline (first boot may take 10-20 min)..."
   python - <<'PY' || echo "Warmup skipped or failed — models load on first /apply"
+try:
+    from api.diffusers_onnx_patch import apply_diffusers_onnx_patch
+    apply_diffusers_onnx_patch()
+except ImportError:
+    pass
 from api.config import get_settings
 from api.services.pipeline import get_pipeline
 

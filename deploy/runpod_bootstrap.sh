@@ -51,6 +51,100 @@ sync_repo() {
   git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
 }
 
+fix_onnx_cuda13() {
+  echo "Fixing onnxruntime / diffusers CUDA13 conflict (RunPod CUDA12)..."
+
+  pip uninstall -y \
+    onnxruntime-gpu onnxruntime onnxruntime-training \
+    onnxruntime-directml onnxruntime-openvino onnxruntime-rocm \
+    2>/dev/null || true
+
+  # Remove broken GPU wheel leftovers
+  python3 - <<'PY'
+import glob
+import shutil
+for pattern in (
+    "/usr/local/lib/python*/dist-packages/onnxruntime*",
+    "/usr/local/lib/python*/site-packages/onnxruntime*",
+):
+    for path in glob.glob(pattern):
+        print("Removing", path)
+        shutil.rmtree(path, ignore_errors=True)
+PY
+
+  echo "Installing Python dependencies (without onnxruntime-gpu)..."
+  grep -v '^onnxruntime' api/requirements-docker.txt | pip install -q --no-cache-dir -r /dev/stdin
+  pip install -q --no-cache-dir --force-reinstall "mediapipe==0.10.14"
+  pip install -q --no-cache-dir --force-reinstall "onnxruntime==1.19.2"
+
+  # Patch files (git reset wipes manual edits — re-apply every boot)
+  cat > api/diffusers_onnx_patch.py << 'PYEOF'
+"""RunPod CUDA12: block diffusers from loading onnxruntime-gpu (needs libcudart.so.13)."""
+from __future__ import annotations
+import sys
+import types
+
+def apply_diffusers_onnx_patch() -> None:
+    if getattr(apply_diffusers_onnx_patch, "_done", False):
+        return
+    try:
+        import diffusers.utils.import_utils as iu
+        iu._onnx_available = False
+        iu.is_onnx_available = lambda: False
+    except ImportError:
+        pass
+    name = "diffusers.pipelines.onnx_utils"
+    if name not in sys.modules:
+        stub = types.ModuleType(name)
+        class OnnxRuntimeModel:
+            pass
+        stub.OnnxRuntimeModel = OnnxRuntimeModel
+        sys.modules[name] = stub
+    apply_diffusers_onnx_patch._done = True
+PYEOF
+
+  python3 - <<'PY'
+from pathlib import Path
+
+def ensure_after(path: Path, needle: str, block: str, label: str) -> None:
+    text = path.read_text()
+    if block.strip() in text:
+        return
+    if needle not in text:
+        raise SystemExit(f"Cannot patch {label}: needle not found")
+    path.write_text(text.replace(needle, block))
+    print(f"patched {label}")
+
+ensure_after(
+    Path("api/services/pipeline.py"),
+    "from __future__ import annotations\n\nimport logging",
+    "from __future__ import annotations\n\nfrom api.diffusers_onnx_patch import apply_diffusers_onnx_patch\n\napply_diffusers_onnx_patch()\n\nimport logging",
+    "api/services/pipeline.py",
+)
+ensure_after(
+    Path("deploy/entrypoint.sh"),
+    "from api.config import get_settings",
+    "from api.diffusers_onnx_patch import apply_diffusers_onnx_patch\napply_diffusers_onnx_patch()\nfrom api.config import get_settings",
+    "deploy/entrypoint.sh",
+)
+ensure_after(
+    Path("api/main.py"),
+    "configure_ssl()\n",
+    "configure_ssl()\n\nfrom api.diffusers_onnx_patch import apply_diffusers_onnx_patch\n\napply_diffusers_onnx_patch()\n",
+    "api/main.py",
+)
+PY
+
+  python3 - <<'PY'
+from api.diffusers_onnx_patch import apply_diffusers_onnx_patch
+apply_diffusers_onnx_patch()
+import onnxruntime as ort
+from diffusers import StableDiffusionInpaintPipeline
+print("onnxruntime", ort.__version__, ort.get_available_providers())
+print("diffusers import OK")
+PY
+}
+
 sync_repo
 
 cd "$REPO_DIR"
@@ -63,8 +157,6 @@ if [[ ! -f masking_bisenet/face-parsing/weights/resnet18.onnx ]]; then
     https://github.com/yakhyo/face-parsing/releases/download/weights/resnet18.onnx
 fi
 
-echo "Installing Python dependencies..."
-pip install -q --no-cache-dir -r api/requirements-docker.txt
-pip install -q --no-cache-dir --force-reinstall "mediapipe==0.10.14"
+fix_onnx_cuda13
 
 exec bash deploy/entrypoint.sh

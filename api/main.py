@@ -4,6 +4,10 @@ from api.ssl_fix import configure_ssl
 
 configure_ssl()
 
+from api.diffusers_onnx_patch import apply_diffusers_onnx_patch
+
+apply_diffusers_onnx_patch()
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 

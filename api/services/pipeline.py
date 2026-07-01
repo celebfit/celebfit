@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from api.diffusers_onnx_patch import apply_diffusers_onnx_patch
+
+apply_diffusers_onnx_patch()
+
 import logging
 
 import cv2

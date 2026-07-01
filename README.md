@@ -74,7 +74,9 @@ MY 탭에서 RunPod URL 저장해도 됩니다.
 ./scripts/open_app_preview.sh https://YOUR_POD_ID-8000.proxy.runpod.net
 ```
 
-Pod URL은 미리보기 **MY 탭**에서 저장 가능. 배포: [RUNPOD.md](./RUNPOD.md)
+Pod URL은 미리보기 **MY 탭**에서 저장 가능.
+
+**RunPod GPU 시연 (팀원용):** [RUNPOD.md](./RUNPOD.md) — 본인 RunPod 계정에서 `app` 브랜치 연결·시연 절차
 
 **로컬 API (선택):**
 

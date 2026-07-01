@@ -15,6 +15,15 @@ from masking_bisenet.generate_mask_bisenet import generate_bisenet_face_parts_ma
 from util.dilate_mask import dilate_mask
 from util.smooth_mask import smooth_mask
 from util.crop_face import get_zoom_crop_info, apply_crop, restore_crop
+
+# RunPod CUDA12: onnxruntime-gpu needs libcudart.so.13 — SD는 PyTorch만 사용
+try:
+    import diffusers.utils.import_utils as _diffusers_import_utils
+
+    _diffusers_import_utils._onnx_available = False
+except ImportError:
+    pass
+
 from diffusers import StableDiffusionInpaintPipeline, UniPCMultistepScheduler, UNet2DConditionModel, AutoencoderKL
 from transformers import CLIPTextModel
 from simple_lama_inpainting import SimpleLama

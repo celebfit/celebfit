@@ -32,11 +32,7 @@ def get_onnx_session():
             print(f"Please run download.sh in the {face_parsing_dir} directory to download the weights.")
             raise FileNotFoundError(f"ONNX weight not found at {weight_path}.")
             
-        providers = (
-            ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            if ort.get_device() == 'GPU'
-            else ['CPUExecutionProvider']
-        )
+        providers = ['CPUExecutionProvider']
         _onnx_session = ort.InferenceSession(weight_path, providers=providers)
     return _onnx_session
 

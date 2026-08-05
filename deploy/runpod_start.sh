@@ -16,6 +16,8 @@ export USE_GITHUB_PIPELINE="${USE_GITHUB_PIPELINE:-true}"
 export ALLOW_FALLBACK="${ALLOW_FALLBACK:-false}"
 export WARMUP_ON_START="${WARMUP_ON_START:-true}"
 export API_PORT="${API_PORT:-8000}"
+# 베이스 이미지가 HF_HUB_ENABLE_HF_TRANSFER=1을 기본으로 켜두는데 hf_transfer 패키지는 없어서 다운로드가 죽음
+export HF_HUB_ENABLE_HF_TRANSFER=0
 
 keep_alive() {
   echo "=== celebfit boot failed — container kept alive for debugging ==="

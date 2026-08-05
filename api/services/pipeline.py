@@ -159,6 +159,33 @@ class EyebrowPipeline:
         template = cv2.dilate(template, np.ones((9, 9), np.uint8), iterations=2)
         return template
 
+    def _ensure_local_sd(self) -> None:
+        if self._using_fallback:
+            return
+        if self.lama_service is not None and self.inpaint_service is not None:
+            return
+        try:
+            from api.services.inpaint_service import InpaintService, LamaService
+
+            lora_dir = resolve_lora_dir(self.settings)
+            self.lama_service = LamaService()
+            self.inpaint_service = InpaintService(
+                base_model_id=self.settings.base_model_id,
+                lora_dir=lora_dir,
+                device=self.device,
+                infer_steps=self.settings.infer_steps,
+                lora_scale=self.settings.lora_scale,
+                strength=self.settings.strength,
+                guidance_scale=self.settings.guidance_scale,
+                seed=self.settings.seed,
+            )
+            self.lama_service._ensure_loaded()
+            self.inpaint_service._ensure_loaded()
+        except Exception as exc:
+            logger.warning("Local SD fallback unavailable: %s", exc)
+            if not self.settings.allow_fallback:
+                raise
+
     def apply(self, image_bytes: bytes, style_id: str) -> tuple[bytes, bytes, dict]:
         self.initialize()
         assert self.mask_service is not None
@@ -167,17 +194,27 @@ class EyebrowPipeline:
         if style is None:
             raise ValueError(f"Unknown style_id: {style_id}")
 
+        github_result = None
         if (
             style.celeb_prompt
             and self.github_pipeline is not None
             and not self._using_fallback
         ):
-            before_bytes, after_bytes = self.github_pipeline.apply(
-                image_bytes,
-                style.celeb_prompt,
-            )
+            try:
+                github_result = self.github_pipeline.apply(
+                    image_bytes,
+                    style.celeb_prompt,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "github_pipeline.apply failed, falling back to local SD: %s", exc
+                )
+
+        if github_result is not None:
+            before_bytes, after_bytes = github_result
             engine = "github_sd_inpaint"
         else:
+            self._ensure_local_sd()
             original_image, masks = self.mask_service.build_masks(image_bytes)
             before_for_model = original_image.resize((512, 512))
 

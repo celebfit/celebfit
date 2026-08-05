@@ -18,6 +18,39 @@ main  ──push──▶  GitHub Action  ──merge──▶  app  ──▶  
 
 ---
 
+## 폴더 구조: 기능 구현 vs 인프라
+
+`app` 브랜치 기준, 폴더를 "무엇을 하는가"와 "어떻게 옮기고 배포하는가"로 나누면 다음과 같습니다.
+(물리적으로 폴더를 재배치하지는 않았습니다 — Python import·배포 스크립트·`sync-main-to-app.yml` 자동 merge가
+전부 현재 경로를 하드코딩하고 있어서, 실제로 옮기면 import가 깨지고 main↔app 자동 동기화가 매번
+충돌 처리로 바뀝니다. 아래는 문서상 분류입니다.)
+
+### 🧠 기능 구현
+
+| 폴더 | 역할 |
+|------|------|
+| `pipeline/` | 핵심 AI 파이프라인 — 추론(`main.py`), LoRA 학습(`train_lora.py`), 배치 실행 |
+| `masking_bisenet/` | 얼굴 파싱 모델 — 눈썹 마스크 검출 + 자체 학습 코드 |
+| `util/` | 파이프라인이 직접 호출하는 이미지 처리 헬퍼(crop, mask, color transfer 등) |
+| `lora_checkpoint/` | 학습된 LoRA 가중치. 실사용은 `celeb_eyebrows_all_gender_integrated`, v2/v3/v4는 비교실험용(`tests/`) |
+| `api/` | Flutter 앱 ↔ AI 파이프라인을 잇는 FastAPI 백엔드 |
+| `celebfit_app/` | 사용자가 보는 Flutter UI (모바일 + 웹 미리보기) |
+| `tests/` | 파이프라인 단계 시각화, LoRA 버전 비교 등 기능 검증/실험 스크립트 |
+
+### 🔧 인프라 / 운영
+
+| 폴더·파일 | 역할 |
+|------|------|
+| `.github/workflows/` | main↔app 브랜치 동기화, GitHub Pages 배포, Docker 이미지 빌드 자동화 |
+| `deploy/` | RunPod 부트스트랩/entrypoint 스크립트 |
+| `scripts/` | RunPod 설치·검증, iOS 설정, 미리보기 공유 등 운영 스크립트 |
+| `Dockerfile`, `.dockerignore` | API 서버 컨테이너 빌드 정의 |
+| `requirements.txt`, `api/requirements*.txt` | 의존성 목록 |
+| `.env.example`, `.gitignore` | 환경설정 템플릿 |
+| `*.md` 문서들 | 가이드/운영 문서 |
+
+---
+
 ## app 브랜치
 
 `app` = **main ML 코드** + **서비스 코드**. RunPod·브라우저 미리보기는 이 브랜치를 사용합니다.

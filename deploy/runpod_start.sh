@@ -43,9 +43,10 @@ if [[ ! -s masking_bisenet/face-parsing/weights/resnet18.onnx ]]; then
     https://github.com/yakhyo/face-parsing/releases/download/weights/resnet18.onnx
 fi
 
-pip uninstall -y onnxruntime-gpu onnxruntime onnxruntime-training 2>/dev/null || true
-grep -v '^onnxruntime' api/requirements-docker.txt | pip install -q --no-cache-dir --ignore-installed -r /dev/stdin
-pip install -q --no-cache-dir --ignore-installed "mediapipe==0.10.14" "onnxruntime==1.19.2"
+export PIP_BREAK_SYSTEM_PACKAGES=1
+pip uninstall -y --break-system-packages onnxruntime-gpu onnxruntime onnxruntime-training 2>/dev/null || true
+grep -v '^onnxruntime' api/requirements-docker.txt | pip install -q --no-cache-dir --break-system-packages --ignore-installed -r /dev/stdin
+pip install -q --no-cache-dir --break-system-packages --ignore-installed "mediapipe==0.10.14" "onnxruntime==1.19.2"
 
 cat > api/diffusers_onnx_patch.py << 'PYEOF'
 from __future__ import annotations

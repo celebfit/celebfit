@@ -44,8 +44,8 @@ if [[ ! -s masking_bisenet/face-parsing/weights/resnet18.onnx ]]; then
 fi
 
 pip uninstall -y onnxruntime-gpu onnxruntime onnxruntime-training 2>/dev/null || true
-grep -v '^onnxruntime' api/requirements-docker.txt | pip install -q --no-cache-dir -r /dev/stdin
-pip install -q --no-cache-dir --force-reinstall "mediapipe==0.10.14" "onnxruntime==1.19.2"
+grep -v '^onnxruntime' api/requirements-docker.txt | pip install -q --no-cache-dir --ignore-installed -r /dev/stdin
+pip install -q --no-cache-dir --ignore-installed "mediapipe==0.10.14" "onnxruntime==1.19.2"
 
 cat > api/diffusers_onnx_patch.py << 'PYEOF'
 from __future__ import annotations

@@ -79,6 +79,18 @@ class FaceMaskService:
         )
         return cv2.dilate(mask, kernel, iterations=1)
 
+    def _eye_protection_mask(
+        self, landmarks, width: int, height: int, dilate_px: int = 14
+    ) -> np.ndarray:
+        eye_mask = np.zeros((height, width), dtype=np.uint8)
+        for eye_indices in (LEFT_EYE, RIGHT_EYE):
+            points = np.array(
+                [[int(landmarks[i].x * width), int(landmarks[i].y * height)] for i in eye_indices]
+            )
+            hull = cv2.convexHull(points)
+            cv2.fillConvexPoly(eye_mask, hull, 255)
+        return self._dilate(eye_mask, dilate_px)
+
     def _method2_mask(self, landmarks, width: int, height: int) -> np.ndarray:
         if self._template is None:
             raise ValueError("눈썹 템플릿이 준비되지 않았습니다.")
@@ -97,6 +109,9 @@ class FaceMaskService:
         mask = self._dilate(mask, 4)
         horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 1))
         mask = cv2.dilate(mask, horizontal_kernel)
+
+        eye_mask = self._eye_protection_mask(landmarks, width, height)
+        mask = cv2.bitwise_and(mask, cv2.bitwise_not(eye_mask))
         return mask
 
     def _landmark_brow_mask(
@@ -107,7 +122,6 @@ class FaceMaskService:
         padding_ratio: float = 0.5,
     ) -> np.ndarray:
         brow_mask = np.zeros((height, width), dtype=np.uint8)
-        eye_mask = np.zeros((height, width), dtype=np.uint8)
 
         for brow_indices in (LEFT_BROW, RIGHT_BROW):
             points = np.array(
@@ -133,14 +147,7 @@ class FaceMaskService:
                 np.full((y_max - y_min, x_max - x_min), 255, dtype=np.uint8),
             )
 
-        for eye_indices in (LEFT_EYE, RIGHT_EYE):
-            points = np.array(
-                [[int(landmarks[i].x * width), int(landmarks[i].y * height)] for i in eye_indices]
-            )
-            hull = cv2.convexHull(points)
-            cv2.fillConvexPoly(eye_mask, hull, 255)
-        eye_mask = self._dilate(eye_mask, 14)
-
+        eye_mask = self._eye_protection_mask(landmarks, width, height)
         final_mask = cv2.bitwise_and(brow_mask, cv2.bitwise_not(eye_mask))
         final_mask = cv2.GaussianBlur(final_mask, (11, 11), 0)
         _, final_mask = cv2.threshold(final_mask, 127, 255, cv2.THRESH_BINARY)

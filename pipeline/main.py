@@ -254,7 +254,6 @@ def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
 
     image_pil = Image.fromarray(cv2.cvtColor(masked_image_512, cv2.COLOR_BGR2RGB))
     pipe_mask_pil = Image.new("RGB", (512, 512), "white")
-    control_image_pil = get_canny_guide(image_512)
 
     # 4. Generate
     UNIFIED_PROMPT_TEMPLATE = "a photo of {celeb} style eyebrows on a face, highly detailed, realistic skin texture, natural skin pores"
@@ -265,8 +264,8 @@ def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
 
     output_pil = pipe(
         prompt=current_prompt, negative_prompt=UNIFIED_NEGATIVE_PROMPT,
-        image=image_pil, mask_image=pipe_mask_pil, control_image=control_image_pil,
-        controlnet_conditioning_scale=0, num_inference_steps=40,
+        image=image_pil, mask_image=pipe_mask_pil,
+        num_inference_steps=40,
         guidance_scale=6.0, strength=0.60, generator=generator
     ).images[0]
 

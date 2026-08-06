@@ -130,7 +130,6 @@ class GitHubEyebrowPipeline:
 
         image_pil = Image.fromarray(cv2.cvtColor(masked_image_512, cv2.COLOR_BGR2RGB))
         pipe_mask_pil = Image.new("RGB", (512, 512), "white")
-        control_image_pil = helpers["get_canny_guide"](image_512)
 
         prompt = UNIFIED_PROMPT_TEMPLATE.format(celeb=celeb_name)
         generator = torch.Generator(self._device).manual_seed(self.seed)
@@ -139,8 +138,6 @@ class GitHubEyebrowPipeline:
             negative_prompt=UNIFIED_NEGATIVE_PROMPT,
             image=image_pil,
             mask_image=pipe_mask_pil,
-            control_image=control_image_pil,
-            controlnet_conditioning_scale=0,
             num_inference_steps=40,
             guidance_scale=6.0,
             strength=0.60,

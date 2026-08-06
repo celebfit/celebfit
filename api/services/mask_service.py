@@ -118,12 +118,13 @@ class FaceMaskService:
             brow_w = x_max - x_min
             brow_h = y_max - y_min
             pad_x = int(brow_w * padding_ratio)
-            pad_y = int(brow_h * padding_ratio * 2)
+            pad_up = int(brow_h * padding_ratio * 2)
+            pad_down = int(brow_h * padding_ratio * 0.4)
 
             x_min = max(0, x_min - pad_x)
             x_max = min(width, x_max + pad_x)
-            y_min = max(0, y_min - pad_y)
-            y_max = min(height, y_max + pad_y)
+            y_min = max(0, y_min - pad_up)
+            y_max = min(height, y_max + pad_down)
 
             hull = cv2.convexHull(points)
             cv2.fillConvexPoly(brow_mask, hull, 255)
@@ -138,7 +139,7 @@ class FaceMaskService:
             )
             hull = cv2.convexHull(points)
             cv2.fillConvexPoly(eye_mask, hull, 255)
-        eye_mask = self._dilate(eye_mask, 6)
+        eye_mask = self._dilate(eye_mask, 14)
 
         final_mask = cv2.bitwise_and(brow_mask, cv2.bitwise_not(eye_mask))
         final_mask = cv2.GaussianBlur(final_mask, (11, 11), 0)

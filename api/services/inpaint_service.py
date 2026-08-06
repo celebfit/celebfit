@@ -115,7 +115,7 @@ class InpaintService:
         target_512 = target_image.resize((512, 512))
         mask_512 = Image.fromarray(cv2.resize(inpaint_mask, (512, 512), interpolation=cv2.INTER_NEAREST)).convert("L")
 
-        scale = self.lora_scale if style.celeb_prompt else max(0.35, self.lora_scale * 0.5)
+        scale = self.lora_scale
         generator = torch.Generator(device=self.device).manual_seed(self.seed)
         generated = self._pipe(
             prompt=self._build_prompt(style),

@@ -227,7 +227,7 @@ class EyebrowPipeline:
                     before_for_model, masks.erase_mask
                 )
                 after_image = self.inpaint_service.generate(
-                    no_brow_image, masks.inpaint_mask, style
+                    before_for_model, no_brow_image, masks.inpaint_mask, style
                 )
 
             before_bytes = image_to_bytes(original_image)

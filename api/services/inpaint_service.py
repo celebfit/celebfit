@@ -100,7 +100,8 @@ class InpaintService:
 
     def generate(
         self,
-        base_image: Image.Image,
+        source_image: Image.Image,
+        target_image: Image.Image,
         inpaint_mask: np.ndarray,
         style: StyleDefinition,
     ) -> Image.Image:
@@ -109,8 +110,9 @@ class InpaintService:
         self._ensure_loaded()
         assert self._pipe is not None
 
-        original_size = base_image.size
-        init_512 = base_image.resize((512, 512))
+        original_size = source_image.size
+        init_512 = source_image.resize((512, 512))
+        target_512 = target_image.resize((512, 512))
         mask_512 = Image.fromarray(cv2.resize(inpaint_mask, (512, 512), interpolation=cv2.INTER_NEAREST)).convert("L")
 
         scale = self.lora_scale if style.celeb_prompt else max(0.35, self.lora_scale * 0.5)
@@ -127,7 +129,7 @@ class InpaintService:
             generator=generator,
         ).images[0]
 
-        blended = self.blend(init_512, generated, mask_512)
+        blended = self.blend(target_512, generated, mask_512)
         return blended.resize(original_size, Image.LANCZOS)
 
 

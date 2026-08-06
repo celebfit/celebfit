@@ -204,7 +204,6 @@ def load_models():
     adapter_name = "unified_celeb"
     pipe.unet = PeftModel.from_pretrained(pipe.unet, os.path.join(lora_path, "unet"), adapter_name=adapter_name)
     pipe.text_encoder = PeftModel.from_pretrained(pipe.text_encoder, os.path.join(lora_path, "text_encoder"), adapter_name=adapter_name)
-    pipe.set_adapters([adapter_name], adapter_weights=[1.15])
     print(f"✅ Loaded LoRA checkpoint: {lora_name}")
 
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
@@ -266,7 +265,8 @@ def run_pipeline(image_path, TARGET_CELEB, pipe, lama, device):
         prompt=current_prompt, negative_prompt=UNIFIED_NEGATIVE_PROMPT,
         image=image_pil, mask_image=pipe_mask_pil,
         num_inference_steps=40,
-        guidance_scale=6.0, strength=0.60, generator=generator
+        guidance_scale=6.0, strength=0.60, generator=generator,
+        cross_attention_kwargs={"scale": 1.15},
     ).images[0]
 
     # Post-processing

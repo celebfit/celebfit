@@ -142,6 +142,7 @@ class GitHubEyebrowPipeline:
             guidance_scale=6.0,
             strength=0.60,
             generator=generator,
+            cross_attention_kwargs={"scale": 1.15},
         ).images[0]
 
         result_bgr_512 = cv2.cvtColor(np.array(output_pil), cv2.COLOR_RGB2BGR)

@@ -22,7 +22,8 @@ class LamaService:
 
     def remove_eyebrows(self, image: Image.Image, erase_mask: np.ndarray) -> Image.Image:
         self._ensure_loaded()
-        mask_pil = Image.fromarray(erase_mask).convert("L")
+        mask_resized = cv2.resize(erase_mask, image.size, interpolation=cv2.INTER_NEAREST)
+        mask_pil = Image.fromarray(mask_resized).convert("L")
         result = image
         for _ in range(3):
             result = self._lama(result, mask_pil)

@@ -110,9 +110,11 @@ class FaceMaskService:
         horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 1))
         mask = cv2.dilate(mask, horizontal_kernel)
 
-        eye_mask = self._eye_protection_mask(landmarks, width, height)
-        mask = cv2.bitwise_and(mask, cv2.bitwise_not(eye_mask))
-        return mask
+        eye_mask = self._eye_protection_mask(landmarks, width, height, dilate_px=4)
+        protected = cv2.bitwise_and(mask, cv2.bitwise_not(eye_mask))
+        if cv2.countNonZero(protected) < cv2.countNonZero(mask) * 0.3:
+            return mask
+        return protected
 
     def _landmark_brow_mask(
         self,
